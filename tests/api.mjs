@@ -1,9 +1,9 @@
-import {readFileSync,writeFileSync,readdirSync} from 'node:fs';
+import {readFileSync,writeFileSync,readdirSync,mkdirSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 const root=new URL('../',import.meta.url);
-const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
+mkdirSync(new URL('.sites-runtime/',root),{recursive:true}); const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
 for(const file of readdirSync(new URL('drizzle/',root)).filter(x=>x.endsWith('.sql')).sort()) db.exec(readFileSync(new URL('drizzle/'+file,root),'utf8'));
 const prepare=(sql)=>({bind(...values){return statement(sql,values)}});
 function statement(sql,values=[]){return {sql,values,first(){return db.prepare(sql).get(...values)||null},all(){return {results:db.prepare(sql).all(...values)}}}}
@@ -35,4 +35,5 @@ const ev=db.prepare("SELECT * FROM events WHERE action='revise'").get();assert.e
 const badOrigin=await POST(new Request('https://test.local/api/graph',{method:'POST',headers:{origin:'https://other.local'},body:'{}'}));assert.equal(badOrigin.status,403);
 globalThis.testUser=null;assert.equal((await GET()).status,401);await post({action:'workspace',title:'No'},401);
 console.log('PASS: persistence, exact-title reuse across conversations, shared workspaces, multi-actor provenance, connections, edit history, validation, rollback, auth and origin checks.');
+
 
