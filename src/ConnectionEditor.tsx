@@ -1,0 +1,37 @@
+import MovableDialogContent from './MovableDialogContent';
+import {ExtractionEvidence} from './ExtractionReview';
+import {useState} from 'react';
+import {typePath} from './Taxonomy';
+import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
+export default function ConnectionEditor({graph,initialIds,visible,act,busy,onClose}:{graph:any;initialIds:string[];visible:any[];act:(body:any)=>Promise<any>;busy:boolean;onClose:()=>void}){
+ const [ids,setIds]=useState(initialIds),[label,setLabel]=useState(''),[description,setDescription]=useState(''),[typeId,setTypeId]=useState(''),[suggestion,setSuggestion]=useState(''),[error,setError]=useState('');
+ const [typeName,setTypeName]=useState(''),[parentId,setParentId]=useState(''),[alias,setAlias]=useState(false),[classify,setClassify]=useState(true);
+ const types=graph.relation_types||[],aliases=graph.relation_aliases||[];
+ const normalize=(s:string)=>s.normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/g,' ');
+ const exact=typeName?types.find((t:any)=>t.parent_id===(parentId||null)&&(normalize(t.title)===normalize(typeName)||aliases.some((a:any)=>a.type_id===t.id&&normalize(a.title)===normalize(typeName)))):null;
+ const similar=typeName.trim().length>=2?types.filter((t:any)=>!exact&&(normalize(t.title).includes(normalize(typeName))||normalize(typeName).includes(normalize(t.title)))).slice(0,5):[];
+ const titles=ids.map(id=>graph.ideas.find((i:any)=>i.id===id)?.title||'');
+ function suggest(value:string){setLabel(value);if(!typeName)setTypeName(value);const text=`הקשר שאני בוחנת בין ${titles.join(' לבין ')} הוא: ${value}.\nהסבר ודוגמה: \nמה תומך בקשר הזה? \nבאילו תנאים הוא לא מתקיים? `;setDescription(text);setSuggestion(text);}
+ return <Dialog open onOpenChange={v=>{if(!v&&!busy)onClose();}}><MovableDialogContent dir="rtl" className="detail-dialog"><DialogTitle>מה הקשר בין הרעיונות?</DialogTitle><DialogDescription>הקו הוא טיוטה עד לשמירה. את בוחרת את השם, הסוג וההסבר.</DialogDescription>
+ <form onSubmit={async e=>{e.preventDefault();try{await act({action:'connection',ideaIds:ids,label,description,typeId:classify?(typeId||null):null,typeName:classify?(typeName.trim()||null):null,parentId:classify?(parentId||null):null,addAlias:classify&&alias,suggestion});onClose();}catch(e){setError(e instanceof Error?e.message:'השמירה נכשלה');}}}>
+ <fieldset disabled={busy}><legend>הרעיונות בקשר</legend><div className="connection-choices">{visible.map((i:any)=><label key={i.id}><input type="checkbox" checked={ids.includes(i.id)} onChange={e=>{setIds(old=>e.target.checked?[...old,i.id]:old.filter(id=>id!==i.id));setSuggestion('');}}/>{i.title}</label>)}</div>
+ <label>שם הקשר<input required maxLength={180} value={label} onChange={e=>setLabel(e.target.value)} placeholder="למשל: משפיע על"/></label>
+ <div className="suggestions"><span>כיווני ניסוח לבחירה — לא ניתוח AI</span><div className="row">{['משפיע על','דומה ל־','חלק מתוך','סותר'].map(s=><button type="button" className="secondary" key={s} disabled={ids.length<2} onClick={()=>suggest(s)}>{s}</button>)}</div><small>בחירה תחליף את טיוטת ההסבר בשאלות מנחות לעריכה.</small></div>
+ <div className="type-classification"><label className="inline-check"><input type="checkbox" checked={classify} onChange={e=>setClassify(e.target.checked)}/>סיווג בעץ סוגי הקשרים</label>{classify&&<>
+ <label>סוג קיים<select value={typeId} onChange={e=>{setTypeId(e.target.value);setAlias(false);}}><option value="">זיהוי לפי שם / הוספת סוג חדש</option>{types.map((t:any)=><option key={t.id} value={t.id}>{typePath(types,t.id)}</option>)}</select></label>
+ {!typeId&&<label>תחת הקטגוריה<select value={parentId} onChange={e=>setParentId(e.target.value)}><option value="">ברמה הראשית</option>{types.map((t:any)=><option key={t.id} value={t.id}>{typePath(types,t.id)}</option>)}</select></label>}
+ <label>{typeId?'שם נרדף נוסף (לא חובה)':'שם סוג הקשר'}<input maxLength={180} required={!typeId} value={typeName} onChange={e=>{setTypeName(e.target.value);setAlias(false);}} placeholder="למשל: מאפשר"/></label>
+ {!typeId&&typeName.trim()&&<p role="status" className="muted">{exact?`זוהה סוג קיים: ${typePath(types,exact.id)}. הקשר יצורף אליו.`:'השם חדש בקטגוריה הזאת. הסוג יתווסף לעץ יחד עם שמירת הקשר.'}</p>}
+ {!typeId&&similar.length>0&&<div className="suggestions"><span>שמות דומים בניסוח — האם התכוונת לאותו סוג?</span>{similar.map((t:any)=><button className="secondary" type="button" key={t.id} onClick={()=>{setTypeId(t.id);setAlias(false);}}>{typePath(types,t.id)}</button>)}</div>}
+ {typeId&&typeName.trim()&&<label className="inline-check"><input type="checkbox" checked={alias} onChange={e=>setAlias(e.target.checked)}/>אני מאשרת ש־„{typeName}” הוא שם נרדף לסוג שבחרתי</label>}
+ </>}</div>
+ <label>הסבר מפורט<textarea maxLength={4000} rows={7} value={description} onChange={e=>setDescription(e.target.value)} placeholder="מה מחבר ביניהם? מה הכיוון? אילו מקורות או דוגמאות תומכים בזה?"/></label>
+ <p className="muted">הגרף שומר את המשתתפים בקשר. אם יש כיוון סיבתי, פרטי כאן מי משפיע על מי; הקו עצמו אינו חץ.</p>
+ {error&&<p className="error" role="alert">{error}</p>}<div className="row"><button className="primary modal-save" disabled={ids.length<2||ids.length>12||!label.trim()}>שמירת הקשר</button><button type="button" className="secondary modal-save" onClick={onClose}>ביטול</button></div></fieldset></form></MovableDialogContent></Dialog>;
+}
+
+export function ConnectionDetails({connection,graph,act,onClose}:{connection:any;graph:any;act:(body:any)=>Promise<any>;onClose:()=>void}){
+ const [label,setLabel]=useState(connection.label),[description,setDescription]=useState(connection.description||''),[saving,setSaving]=useState(false),[error,setError]=useState('');
+ const type=graph.relation_types?.find((t:any)=>t.id===connection.type_id);
+ return <Dialog open onOpenChange={v=>{if(!v)onClose();}}><MovableDialogContent dir="rtl" className="detail-dialog"><DialogTitle>{connection.label}</DialogTitle><DialogDescription>פרטי הקשר והמקור שלו</DialogDescription><p>סוג: {type?.title||'ללא סיווג'}</p><p>{graph.connection_participants.filter((p:any)=>p.connection_id===connection.id).map((p:any)=>graph.ideas.find((i:any)=>i.id===p.idea_id)?.title).join(' · ')}</p><form onSubmit={async e=>{e.preventDefault();if(saving)return;setSaving(true);try{await act({action:'revise-connection',id:connection.id,label,description});onClose();}catch(e){setError(e instanceof Error?e.message:'השמירה נכשלה');}finally{setSaving(false);}}}><fieldset disabled={saving}><label>שם הקשר<input value={label} maxLength={180} required onChange={e=>setLabel(e.target.value)}/></label><label>הסבר מפורט<textarea value={description} maxLength={4000} onChange={e=>setDescription(e.target.value)}/></label><p className="muted">שינוי השם אינו משנה את הסיווג בעץ או את המשתתפים בקשר.</p>{error&&<p role="alert" className="error">{error}</p>}<button className="primary" disabled={!label.trim()}>שמירת שינויים</button></fieldset></form><p className="muted">נוצר על ידי {graph.users.find((u:any)=>u.id===connection.created_by)?.name} · {new Date(connection.created_at).toLocaleString('he-IL')}</p><ExtractionEvidence graph={graph} entityId={connection.id}/>{connection.suggestion&&<details><summary>טיוטת הניסוח שנבחרה לפני העריכה</summary><p style={{whiteSpace:'pre-wrap'}}>{connection.suggestion}</p><small>מקור: תבנית ניסוח, לא ניתוח של מודל.</small></details>}</MovableDialogContent></Dialog>;
+}

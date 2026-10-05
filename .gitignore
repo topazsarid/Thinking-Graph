@@ -45,3 +45,23 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+# Local Python environment, private data and generated files
+.venv/
+__pycache__/
+.pytest_cache/
+/data/
+/backups/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Machine-local editor state, test scratch and private credentials
+.idea/
+/pytest-cache-files-*/
+*.py[cod]
+*.log
+*.key
+*.p12
+*.pfx
