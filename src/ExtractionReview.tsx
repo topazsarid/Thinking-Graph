@@ -16,7 +16,7 @@ export function ExtractionEvidence({graph,entityId}:{graph:any;entityId:string})
  return <section><h3>המשמעות וההקשר מהמקור</h3>{sources.map((i:any)=><div className="extraction-item" key={i.run.id+i.key}><strong>{kinds[i.kind as Item['kind']]} · {i.text}</strong><p>{states[i.epistemic]}{i.relation?` · ${i.relation}`:''}</p>{i.kind==='metadata'&&!i.target&&<small>מתייחס להודעה כולה; אינו בהכרח ייחודי לרעיון הזה.</small>}<p>{i.detail}</p>{i.uncertainty&&<p>דורש הבהרה: {i.uncertainty}</p>}<blockquote>{i.quote}</blockquote><details><summary>הודעת המקור · חילוץ {i.run.model}, באישור משתמשת</summary><p className="extraction-original">{graph.messages.find((m:any)=>m.id===i.run.message_id)?.content}</p></details></div>)}</section>;
 }
 
-export default function ExtractionReview({run,graph,act,busy,onClose}:{run:any;graph:any;act:(body:any)=>Promise<any>;busy:boolean;onClose:()=>void}){
+export default function ExtractionReview({run,graph,act,busy,onClose,onApproved}:{run:any;graph:any;act:(body:any)=>Promise<any>;busy:boolean;onClose:()=>void;onApproved?:(runId:string)=>void}){
  const reviewed=run.status==='reviewed';
  const stored=JSON.parse(reviewed?run.review:run.proposal);
  const [items,setItems]=useState<Item[]>(stored.items);
@@ -31,7 +31,7 @@ export default function ExtractionReview({run,graph,act,busy,onClose}:{run:any;g
   const keys=new Set(chosen.filter(i=>i.kind==='idea').map(i=>i.key));
   if(chosen.some(i=>i.kind==='connection'&&(!keys.has(i.source||'')||!keys.has(i.target||'')||i.source===i.target))){setError('לכל קשר צריך לבחור שני רעיונות שונים שנכללים באישור. אפשר גם להסיר את הקשר.');return;}
   if(chosen.some(i=>i.kind==='metadata'&&i.target&&!keys.has(i.target))){setError('ההקשר מפנה לרעיון שהוסר. בחרי בהודעה כולה או ברעיון אחר.');return;}
-  try{await act({action:'review-extraction',runId:run.id,proposal:{items:chosen},bindings:Object.fromEntries(Object.entries(bindings).filter(([key,value])=>keys.has(key)&&value))});onClose();}catch(e){setError(e instanceof Error?e.message:'השמירה נכשלה');}
+  try{await act({action:'review-extraction',runId:run.id,proposal:{items:chosen},bindings:Object.fromEntries(Object.entries(bindings).filter(([key,value])=>keys.has(key)&&value))});onApproved?.(run.id);onClose();}catch(e){setError(e instanceof Error?e.message:'השמירה נכשלה');}
  }
  return <Dialog open onOpenChange={v=>{if(!v&&!busy)onClose();}}><DialogContent dir="rtl" className="detail-dialog extraction-dialog"><DialogTitle>{reviewed?'החילוץ שאושר':'בדיקת החילוץ מהטקסט'}</DialogTitle><DialogDescription>הצעות מהמודל המקומי {run.model}. בדקי את המשמעות ואת הציטוטים. הקשרים כאן אמורים לשקף את הטקסט שלך; הם אינם עובדות מאומתות.</DialogDescription>
  <details><summary>הטקסט המקורי</summary>{(graph.note_message_sources||[]).some((n:any)=>n.message_id===run.message_id)&&<p>מקור: צילום מצב של הפתקים {(graph.note_message_sources||[]).filter((n:any)=>n.message_id===run.message_id).map((n:any)=>n.title).join(" · ")}. עריכות מאוחרות בפתקים אינן משנות מקור זה.</p>}<p className="extraction-original">{source?.content}</p></details>

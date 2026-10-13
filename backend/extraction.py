@@ -1,9 +1,7 @@
 """Local model extraction. Model output is an untrusted, source-checked draft."""
 import json
-import os
 import re
-from threading import Lock
-from urllib.request import Request, build_opener, ProxyHandler
+from . import ollama
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Literal
 
@@ -68,8 +66,6 @@ Return {"items": [...]} with all fields on every item. Aim for at most 6 items; 
 Do not create redundant metadata. An influence/travel experience is metadata, not an idea.
 If a relationship is only implicit or ambiguous, explain uncertainty instead of inventing it.'''
 
-_lock = Lock()
-
 def source_passages(content):
     return {f's{index+1}': passage for index, passage in enumerate(
         dict.fromkeys(p.strip() for p in re.split(r'\n+|(?<=[.!?])\s+', content) if p.strip()))}
@@ -93,15 +89,18 @@ def output_schema(content):
     schema['properties']['items']['items'] = {'anyOf': variants}
     return schema
 
-def generate(content):
+def precheck(content):
+    """Fast checks before the request waits in the model queue."""
     from .service import DomainError
-    model = os.environ.get('THINKING_GRAPH_MODEL', 'qwen3.5:4b')
-    if 'cloud' in model.casefold():
-        raise DomainError('החילוץ מוגדר למודל מקומי בלבד. בחרי מודל שהורד למחשב.', 400)
+    model = ollama.local_model()
     if len(content) > 4000:
         raise DomainError('בחילוץ המקומי הראשון אפשר לנתח עד 4,000 תווים. פצלי את הטקסט להודעות קצרות יותר; המקור נשמר.', 422)
-    if not _lock.acquire(blocking=False):
-        raise DomainError('חילוץ אחר עדיין מתבצע. נסי שוב כשיסתיים.', 409)
+    return model
+
+def generate(content):
+    # Callers serialize model work through ai_queue; this function only talks to the model.
+    from .service import DomainError
+    model = precheck(content)
     try:
         example = {'items': [dict(key='i1', kind='idea', text='הליכה',
             detail='', quote='s1',
@@ -113,25 +112,13 @@ def generate(content):
             dict(key='m1', kind='metadata', text='טיול עורר את המחשבה', detail='ההקשר שבו עלתה המחשבה',
             quote='s2', epistemic='statement', relation='עורר', source=None,
             target=None, uncertainty='')]}
-        body = dict(model=model, stream=False, format=output_schema(content), keep_alive=0,
+        body = dict(model=model, format=output_schema(content), keep_alive=0,
                     messages=[{'role': 'system', 'content': PROMPT},
                               {'role': 'user', 'content': json.dumps({'s1':'אני משערת שהליכה תורמת לריכוז.', 's2':'חשבתי על זה בטיול.'}, ensure_ascii=False)},
                               {'role': 'assistant', 'content': json.dumps(example, ensure_ascii=False)},
                               {'role': 'user', 'content': json.dumps(source_passages(content), ensure_ascii=False)}],
                     options={'temperature': 0, 'num_ctx': 8192, 'num_predict': 4000})
-        if model.startswith(('qwen3', 'deepseek-r1')):
-            body['think'] = False
-        request = Request('http://127.0.0.1:11434/api/chat', data=json.dumps(body).encode(),
-                          headers={'Content-Type': 'application/json'})
-        # Fixed loopback destination; never route personal thoughts through an environment proxy.
-        with build_opener(ProxyHandler({})).open(request, timeout=300) as response:
-            raw = response.read(1_000_001)
-        if len(raw) > 1_000_000:
-            raise ValueError('Oversize response')
-        data = json.loads(raw)
-        if not data.get('done') or data.get('done_reason') == 'length':
-            raise ValueError('Incomplete model response')
-        output = json.loads(data['message']['content'])
+        output = json.loads(ollama.chat(body))
         passages = source_passages(content)
         for item in output['items']:
             item['quote'] = passages[item['quote']]
@@ -142,5 +129,3 @@ def generate(content):
         raise DomainError('המודל החזיר טיוטה לא תקינה או ציטוט שאינו במקור. דבר לא נוסף למפה. אפשר לנסות קטע קצר יותר או מודל אחר.', 422)
     except (OSError, TimeoutError):
         raise DomainError('לא התקבלה תשובה מהמודל המקומי בזמן. ודאי ש־Ollama פועל ושהמודל מותקן, ונסי שוב.', 503)
-    finally:
-        _lock.release()

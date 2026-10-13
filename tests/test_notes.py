@@ -72,3 +72,52 @@ def test_connection_removal_is_recoverable_and_retry_safe(client):
     assert restored['connections']==before['connections']
     assert restored['connection_participants']==before['connection_participants']
     assert len([e for e in restored['events'] if e['action']=='delete'])==1
+
+
+def test_task_notes_persist_and_completion_is_retry_safe(tmp_path):
+    path = tmp_path / 'tasks.sqlite'
+    with TestClient(create_app(path), base_url='http://127.0.0.1:8000') as c:
+        general = post(c, 'note', title='General', content='Text')['id']
+        task = post(c, 'note', title='Task', content='Do this', kind='task')['id']
+        post(c, 'note', expected_status=422, title='Bad', content='Text', kind='unknown')
+        post(c, 'complete-note', expected_status=422, id=general, completed=True)
+        post(c, 'complete-note', expected_status=404, id=str(uuid4()), completed=True)
+        command = dict(commandId=str(uuid4()), action='complete-note', id=task, completed=True)
+        assert c.post('/api/graph', json=command).status_code == 200
+        before = graph(c)
+        assert c.post('/api/graph', json=command).status_code == 200
+        assert graph(c) == before
+        post(c, 'note', id=task, title='Edited', content='Still a task')
+        saved = next(n for n in graph(c)['notes'] if n['id'] == task)
+        assert saved['kind'] == 'task' and saved['completed'] is True
+        assert saved['content'] == 'Still a task'
+    with TestClient(create_app(path), base_url='http://127.0.0.1:8000') as c:
+        saved = next(n for n in graph(c)['notes'] if n['id'] == task)
+        assert saved['completed'] is True
+        post(c, 'complete-note', id=task, completed=False)
+        assert next(n for n in graph(c)['notes'] if n['id'] == task)['completed'] is False
+        post(c, 'complete-note', id=task, completed=True)
+        post(c, 'note', id=task, title='Converted', content='Text', kind='general')
+        saved = next(n for n in graph(c)['notes'] if n['id'] == task)
+        assert saved['kind'] == 'general' and saved['completed'] is False
+        event = next(e for e in graph(c)['events'] if e['action'] == 'complete')
+        assert json.loads(event['before'])['completed'] is False
+        assert json.loads(event['after'])['completed'] is True
+
+
+def test_existing_notes_upgrade_without_data_loss(tmp_path):
+    from alembic import command
+    from alembic.config import Config
+    from backend.database import make_engine, ROOT
+    engine = make_engine(tmp_path / 'upgrade.sqlite')
+    config = Config(str(ROOT / 'alembic.ini'))
+    with engine.begin() as db:
+        config.attributes['connection'] = db
+        command.upgrade(config, '20261002_notes')
+        db.exec_driver_sql("INSERT INTO users(id,name) VALUES ('u','User')")
+        db.exec_driver_sql("INSERT INTO notes(id,title,content,updated_at,created_by,created_at) VALUES ('n','Old','Original text','date','u','date')")
+        command.upgrade(config, 'head')
+        row = db.exec_driver_sql('SELECT * FROM notes').mappings().one()
+        assert row['content'] == 'Original text'
+        assert row['kind'] == 'general' and row['completed'] == 0
+    engine.dispose()

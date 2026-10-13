@@ -14,8 +14,9 @@ function fromHex(value:string):Color{
 }
 const colors=[['שחור','#161616'],['אפור','#808080'],['לבן','#ffffff'],['אדום','#c62828'],['כתום','#ed6c02'],['צהוב','#ffcf33'],['ירוק','#215b4b'],['טורקיז','#008b8b'],['כחול','#245dcc'],['סגול','#7639a7'],['ורוד','#e85b9d'],['ורוד בהיר','#ffc3dc'],['אפור בהיר','#c7c7c7'],['חום','#8c5738'],['אפרסק','#ffb48f'],['קרם','#fff0b0'],['ירוק בהיר','#a8d5a2'],['תכלת','#a0d8ef'],['לבנדר','#c6b7ec'],['בורדו','#81264e']];
 function initial():Color{try{const saved=JSON.parse(localStorage.getItem('thinking-graph:color')||'null');if(saved&&Number.isFinite(saved.h)&&saved.h>=0&&saved.h<=360&&saved.s>=0&&saved.s<=1&&saved.v>=0&&saved.v<=1)return saved;const old=localStorage.getItem('thinking-graph:hue');if(old!==null&&Number.isFinite(Number(old)))return {h:Number(old),s:.64,v:.48};}catch{}return fromHex('#215b4b');}
-export default function ThemePicker({onColorChange}:{onColorChange:(color:string)=>void}){
- const [open,setOpen]=useState(false),[error,setError]=useState(''),[color,setColor]=useState<Color>(initial);
+// Stays mounted to apply the saved color; when `open` is passed, the parent opens it (e.g. from a menu).
+export default function ThemePicker({onColorChange,open:controlledOpen,onOpenChange}:{onColorChange:(color:string)=>void;open?:boolean;onOpenChange?:(open:boolean)=>void}){
+ const [ownOpen,setOwnOpen]=useState(false),[error,setError]=useState(''),[color,setColor]=useState<Color>(initial); const open=controlledOpen??ownOpen,setOpen=onOpenChange??setOwnOpen;
  const selected=hex(color);
  useLayoutEffect(()=>{
    onColorChange(selected);
@@ -28,7 +29,7 @@ export default function ThemePicker({onColorChange}:{onColorChange:(color:string
  },[color,selected,onColorChange]);
  function choose(next:Color){setColor(next);try{localStorage.setItem('thinking-graph:color',JSON.stringify(next));setError('');}catch{setError('הצבע השתנה, אך לא ניתן לשמור את ההעדפה בדפדפן.');}}
  function pick(e:PointerEvent<HTMLDivElement>){const box=e.currentTarget.getBoundingClientRect();choose({...color,s:Math.max(0,Math.min(1,(e.clientX-box.left)/box.width)),v:1-Math.max(0,Math.min(1,(e.clientY-box.top)/box.height))});}
- return <><button className="secondary" onClick={()=>setOpen(true)}>שינוי צבע</button><Dialog open={open} onOpenChange={setOpen}><DialogContent dir="rtl" className="color-dialog"><DialogTitle>בחירת צבע למערכת</DialogTitle><DialogDescription>בחרי משבצת או צבע מדויק בריבוע. הבחירה נשמרת בדפדפן הזה.</DialogDescription>
+ return <>{controlledOpen===undefined&&<button className="secondary" onClick={()=>setOpen(true)}>שינוי צבע</button>}<Dialog open={open} onOpenChange={setOpen}><DialogContent dir="rtl" className="color-dialog"><DialogTitle>בחירת צבע למערכת</DialogTitle><DialogDescription>בחרי משבצת או צבע מדויק בריבוע. הבחירה נשמרת בדפדפן הזה.</DialogDescription>
  <div className="paint-swatches">{colors.map(([name,value])=><button key={value} aria-label={name} title={name} aria-pressed={selected===value} style={{background:value}} onClick={()=>choose(fromHex(value))}/>)}</div>
  <div className="color-square" role="group" aria-label="בחירת עוצמת צבע ובהירות" style={{backgroundColor:`hsl(${color.h} 100% 50%)`}} onPointerDown={e=>{if(e.button!==0)return;e.currentTarget.setPointerCapture(e.pointerId);pick(e);}} onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))pick(e);}}><span className="color-cursor" style={{left:`${color.s*100}%`,top:`${(1-color.v)*100}%`}}/></div>
  <label>משפחת הצבע<input className="hue-strip" dir="ltr" type="range" min="0" max="359" value={Math.round(color.h)} onChange={e=>choose({...color,h:Number(e.target.value)})}/></label>

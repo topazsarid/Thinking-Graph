@@ -14,7 +14,8 @@ def provenance():
 users = Table('users', metadata, Column('id', String(100), primary_key=True),
               Column('name', Text, nullable=False))
 conversations = Table('conversations', metadata, identity(),
-                      Column('title', Text, nullable=False), *provenance())
+                      Column('title', Text, nullable=False),
+                      Column('answer_preference', Text, nullable=False, server_default=''), *provenance())
 workspaces = Table('workspaces', metadata, identity(),
                    Column('title', Text, nullable=False), *provenance())
 messages = Table('messages', metadata, identity(),
@@ -63,11 +64,24 @@ extraction_runs = Table('extraction_runs', metadata, identity(),
     Column('model', Text, nullable=False), Column('proposal', Text, nullable=False),
     Column('review', Text), Column('status', String(20), nullable=False), *provenance())
 notes = Table('notes', metadata, identity(), Column('title', Text, nullable=False),
+    Column('kind', String(20), nullable=False, server_default='general'),
+    Column('completed', Boolean, nullable=False, server_default='0'),
     Column('content', Text, nullable=False), Column('updated_at', String(40), nullable=False), *provenance())
 note_message_sources = Table('note_message_sources', metadata,
     Column('note_id', String(36), ForeignKey('notes.id'), primary_key=True),
     Column('message_id', String(36), ForeignKey('messages.id'), primary_key=True),
     Column('title', Text, nullable=False), Column('content', Text, nullable=False),
     Column('note_updated_at', String(40), nullable=False), *provenance())
+# Local-model replies to a message. Kept apart from messages: never extracted, never in My Map.
+# mode: self (mirror), external (advisor; concept JSON for the Explanation screen),
+# search (smart map search; idea_ids JSON). created_by is the local assistant.
+chat_replies = Table('chat_replies', metadata, identity(),
+    Column('message_id', String(36), ForeignKey('messages.id'), nullable=False),
+    Column('conversation_id', String(36), ForeignKey('conversations.id'), nullable=False),
+    Column('workspace_id', String(36), ForeignKey('workspaces.id')),
+    Column('mode', String(20), nullable=False), Column('content', Text, nullable=False),
+    Column('concept', Text), Column('idea_ids', Text), Column('model', Text, nullable=False),
+    *provenance(), CheckConstraint("mode IN ('self','external','search')", name='reply_mode'))
+Index('idx_chat_replies_message', chat_replies.c.message_id)
 GRAPH_TABLES = [users, conversations, messages, ideas, workspaces, workspace_ideas,
-                message_ideas, connections, connection_participants, events, relation_types, relation_aliases, extraction_runs, notes, note_message_sources]
+                message_ideas, connections, connection_participants, events, relation_types, relation_aliases, extraction_runs, notes, note_message_sources, chat_replies]

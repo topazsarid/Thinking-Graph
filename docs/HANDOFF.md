@@ -1,40 +1,86 @@
 # Current handoff
 
-Last updated: 2026-10-05. Replace this checkpoint; do not append a diary.
+Last updated: 2026-10-13. Replace this checkpoint; do not append a diary.
 
-## Completed
-- Shared AGENTS / Claude pointer and concise current-state docs added; ignore rules hardened.
-- Existing implementation includes mobile Chat/Notes/Map, shared server notes/messages,
-  movable idea/connection dialogs, double-click editing, connected-group movement,
-  per-idea scale and wrapped titles. See README's 2026-10-04 entry for prior QA details.
-- Only docs and .gitignore were changed for this handoff task; application files preserved.
+## Completed (all uncommitted)
+- 2026-10-13 e: Docker step 2 DONE by the user (named volume `thinking-graph-data` at /app/data;
+  data survived container removal). Step 3 file written: compose.yaml (service `app`, build ., image
+  thinking-graph, 127.0.0.1:8000:8000, volume `thinking-graph-data` with fixed name so the step-2
+  volume is reused). Not yet run by the user. User's real data is still only in data/ (native app).
+- 2026-10-13 d: Docker step 1 DONE by the user (image built, container ran, empty DB as expected).
+  Docker Desktop is a per-user install: %LOCALAPPDATA%\Programs\DockerDesktop. Bug fixed: with no
+  workspaces the "בחרי מרחב" Select opened an empty list and locked page scrolling; Picker is now
+  disabled with an `emptyLabel` hint. Playwright 3/3. dist/ rebuilt (the Docker image must be rebuilt
+  to include it). Next: Docker step 2 (named volume for /app/data).
+- 2026-10-13 c (user request): drawing zoom (DrawingBoard viewBox: −/%/+ buttons, wheel at pointer,
+  "✋ הזזה" pan mode, % button resets); focus mode button in the top bar (Maximize2): hides top bar,
+  workspace bar and panel toolbar, ResizablePanels `fill` tiles the visible windows over the full
+  screen without changing the saved layout; Esc (when no dialog is open) or the floating
+  "יציאה ממסך מלא" button leaves it. Conversation menu: no edge hover any more; opens only from
+  "שיחות" (`data-drawer-toggle`), closes on outside pointerdown or Escape. Writing box can be hidden
+  (chevron next to the grip; localStorage `thinking-graph:composer-hidden`), "כתיבת הודעה" shows it.
+  Window size itself was already adjustable (+/− in each window bar, corner grip).
+  Checks: TypeScript build; Playwright 17/17 on a throwaway DB. dist/ rebuilt by agent.
+- 2026-10-13 later (user request), top bar: sticky header; text "שמירה מקומית במחשב" removed
+  (status shows only "שומרת…"/"מתחברים…"); buttons reduced to "שיחות", "אפקטים ▾", "פתקים ▾"
+  plus a chevron that hides/shows the second (workspace) bar (localStorage
+  `thinking-graph:workspace-bar-hidden`). Effects menu: built-in toggles, saved effects,
+  turn off, "יצירת אפקט…", "שינוי צבע…" (ThemePicker now optionally controlled, stays mounted).
+  Notes menu: create note / extract from notes / all notes.
+- Conversation side menu (src/ConversationDrawer.tsx): opens on hover at the right screen edge
+  (left if the document is LTR) or via "שיחות"; lists chat conversations (notes-snapshot
+  conversations excluded) by latest activity, labeled by first message; "שיחה חדשה".
+- Effect studio rewritten (src/EffectStudio.tsx): kinds "pattern" (grid 3..24 squares per row,
+  drag-paint, eraser, random fill, tile size, drifting tiled layer) and "images" (up to 8 uploads,
+  downscaled to 180px PNG data URLs, floating and bouncing). Old saved garden/birds/fire effects
+  still play. Saved effects can be deleted; quota errors are reported. Text-prompt parsing removed.
+- Note: the user's editor reformatted App.tsx with Prettier (1273+ lines) and the user removed the
+  composer footnote; both preserved.
+- Checks: TypeScript build passed; Playwright 25/25 on a throwaway DB (menus, sticky header in a
+  short window, bar toggle persistence, pattern paint + play + save, 2 uploaded images floating,
+  color dialog, notes menu, edge-hover drawer, new chat, switching chats). dist/ rebuilt by agent.
+- 2026-10-13 (user request): chat window has no conversation picker / "שיחה" heading / new-
+  conversation button; it shows the first conversation that is not a notes-extraction snapshot
+  (snapshots keep their hidden "חילוץ מפתקים" conversations). Answer-preference and Explanation
+  buttons moved into the composer footer. Drag grip (or arrow keys) above the composer resizes
+  the writing box 40px..60% of the window (localStorage `thinking-graph:composer-height`); the
+  message list takes the rest. Playwright 8/8 on a throwaway DB.
+- 2026-10-13: user had not rebuilt the UI (dist was from 10-06), so the new buttons were invisible.
+  The agent built dist on Linux and copied it into dist/ (old asset files remain, harmless).
+  The user's server had already been restarted: data/ already has chat_replies (migration applied).
+  Verified backup: backups/thinking-graph-2026-10-13.sqlite (integrity ok). A failed SQLite-API
+  backup attempt over the device mount left thinking-graph-2026-10-13-before-replies.sqlite
+  (overwritten with the verified copy) and an empty -journal file; both safe to delete.
+- Auto-frame after extraction approval (App `revealRun`/`reveal`, IdeaMap `frame()`; mobile
+  switches to Map). Same mechanism now also reveals map-search results, switching workspace.
+- Chat replies (see NOW and ARCHITECTURE): 3 buttons per message (self / search / external),
+  plain-text search first then optional AI search, Explanation screen for external concepts,
+  per-conversation answer preference, visible cancellable model queue for ALL Ollama work.
+- Extraction no longer blocks the composer/app; several extractions can wait in the queue.
+  The old "another extraction is running" 409 is gone (queue replaces `_lock`).
+- New: backend/ai_queue.py, ollama.py, replies.py; migration 20261012_chat_replies
+  (chat_replies table, conversations.answer_preference); src/MessageReplies.tsx,
+  ModelQueue.tsx, ExplanationPanel.tsx, AnswerPreference.tsx, mapSearch.ts, requestReply.ts;
+  tests/test_replies.py, tests/map_search.test.ts. Changed: main.py, models.py, schemas.py,
+  service.py, extraction.py, App.tsx, IdeaMap.tsx, ExtractionReview.tsx, requestExtraction.ts,
+  globals.css, tests/test_extraction.py (streaming fake), docs NOW/PARKED/ARCHITECTURE.
+- Docker step 1 files (Dockerfile, .dockerignore) from 2026-10-07 unchanged; user has not run them.
+- Earlier note-tasks work (other agent) preserved.
 
-## In progress / unfinished
-- No code task in progress. Actual phone connectivity is NOT configured: server is loopback-only.
-- No decision yet between same-Wi-Fi access and remote access. Mobile viewport support alone
-  does not make this server reachable from an iPhone.
+## Checks run (agent, Linux scratch copies; nothing written to data/)
+- pytest: 29 passed. `alembic check` on a fresh migrated DB: no new operations.
+- npm run build (TypeScript) passed. node tests: extraction_request 2/2, map_groups 2/2, map_search 3/3.
+- Playwright on a throwaway DB with a fake slow streaming Ollama: 16/16 checks: text search
+  in current map + reveal; found-in-other-workspace switch; AI smart search reveal; preference
+  saved and sent to the model; queue shows running + 2 waiting; composer usable while waiting;
+  cancel waiting (never runs, no error); stop running (connection closed, nothing saved);
+  explanation screen opens with concept; replies never become ideas; mobile 390x844 screenshot.
+- NOT tested with the real Ollama/qwen3.5:4b: real answer quality and speed are unknown.
 
-## Relevant files
-- Start at NOW, PRODUCT and ARCHITECTURE as needed; README owns setup commands.
-- UI: App, ResizablePanels, MobileNotes, IdeaMap, mapGroups, MovableDialogContent, globals.css.
-- API/storage: backend/main.py, service.py, models.py, database.py and migrations/versions/.
-- Historical proposals: design-delta-2026-10-01.md and its mapping, referenced from PARKED.
-
-## Git / tests / status
-- Repo is `outputs/thinking-graph` within the outer work folder. Open THIS folder in both tools.
-- Branch `main`; HEAD `cf1c671` (previous `7d1ec58`). Substantial existing unstaged changes
-  and untracked source implement the migration away from the old starter. Existing tracked
-  deletions are intentional prior work, not deletions to restore automatically. Nothing staged
-  at inspection; no commit or push made. Git history alone is not the current implementation.
-- This task: checked documentation links, ignore coverage, and unchanged application hashes.
-  No runtime tests rerun for documentation-only edits.
-- Prior recorded validation (not rerun today): 22 API tests; production build/TypeScript;
-  2 extraction-client tests; 2 map tests. Browser QA included 390x844 and desktop, persisted
-  note/message, dialog drag/resize, double-click, group movement, scale reload and long title.
-
-## Blockers / next step
-No blocker for switching agents. Use one active writer in the SAME checkout; do not create
-another clone/worktree for this workflow. Private DB/localStorage are not Git backups.
-Next agent: inspect status/diff, ask for the next scoped task, and update NOW before coding.
-If phone access is chosen, first settle access scope and authentication approach; do not
-merely change the bind address. Do not implement PARKED items automatically.
+## Blockers / exact next step
+- User: restart start-local.cmd and refresh the browser (dist already rebuilt), try the three
+  reply buttons with real Ollama, report quality/speed and what still does not feel like a chat.
+- Known limits: cancel of a running request takes effect at the next streamed token (not during
+  prompt evaluation); queue is in memory (cleared on server restart); keep_alive=0 reloads the
+  model per request (slower on CPU; tunable later).
+- Then resume Docker step 1. Docker step 4 can use THINKING_GRAPH_OLLAMA_URL (already added).

@@ -76,11 +76,22 @@ class SaveNote(Command):
     id: UUID | None = None
     title: Title
     content: Content
+    kind: Literal['general', 'task'] | None = None
+
+class CompleteNote(Command):
+    action: Literal['complete-note']
+    id: UUID
+    completed: bool
 
 class SnapshotNotes(Command):
     action: Literal['snapshot-notes']
     noteIds: list[UUID] = Field(min_length=1, max_length=12)
     workspaceId: UUID
+
+class ConversationPreference(Command):
+    action: Literal['conversation-preference']
+    id: UUID
+    preference: str = Field(default='', max_length=1000)
 
 class RelationType(Command):
     action: Literal['relation-type']
@@ -90,4 +101,4 @@ class RelationType(Command):
     parentId: UUID | None = None
 
 GraphCommand = Annotated[Union[CreateContainer, CreateMessage, ReviseIdea, LinkIdea,
-                                CreateConnection, ReviseConnection, ConnectionVisibility, SaveNote, SnapshotNotes, RelationType, ReviewExtraction, CreateIdea], Field(discriminator='action')]
+                                CreateConnection, ReviseConnection, ConnectionVisibility, SaveNote, CompleteNote, SnapshotNotes, RelationType, ReviewExtraction, CreateIdea, ConversationPreference], Field(discriminator='action')]

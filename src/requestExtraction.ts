@@ -4,6 +4,8 @@ export async function requestExtraction(body:{requestId:string;messageId:string;
  try{
   const response=await fetcher('/api/extractions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const result=await response.json();
+  // 410: the user cancelled it in the model queue; callers stay quiet about it.
+  if(response.status===410){const error=Error(result.error||'הבקשה בוטלה.');error.name='Cancelled';throw error;}
   if(!response.ok)throw Error(result.error||'החילוץ נכשל');
   return result;
  }catch(error){

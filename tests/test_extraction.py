@@ -106,25 +106,30 @@ def test_provider_resolves_passage_id_and_rejects_unknown_source(monkeypatch):
     generated['items'] = generated['items'][:1]
     generated['items'][0]['quote'] = 's1'
     captured = {}
+    from backend import ollama
     class Response:
+        # Ollama streams one JSON object per line; split the answer to exercise joining.
         def __enter__(self): return self
         def __exit__(self, *args): pass
-        def read(self, limit):
-            return json.dumps({'done':True, 'message':{'content':json.dumps(generated)}}).encode()
+        def __iter__(self):
+            text = json.dumps(generated)
+            yield (json.dumps({'done':False, 'message':{'content':text[:10]}}) + '\n').encode()
+            yield (json.dumps({'done':True, 'done_reason':'stop', 'message':{'content':text[10:]}}) + '\n').encode()
     class Opener:
         def open(self, request, timeout):
             captured.update(url=request.full_url, body=json.loads(request.data), timeout=timeout)
             return Response()
-    monkeypatch.setattr(extraction, 'build_opener', lambda *args: Opener())
+    monkeypatch.setattr(ollama, 'build_opener', lambda *args: Opener())
     monkeypatch.setenv('THINKING_GRAPH_MODEL', 'qwen3.5:4b')
     result, model = extraction.generate(TEXT)
     assert result.items[0].quote == 'אני משערת שמאמץ שרירי מועיל.'
     assert captured['url'] == 'http://127.0.0.1:11434/api/chat'
     assert captured['body']['think'] is False
     assert captured['body']['keep_alive'] == 0
+    assert captured['body']['stream'] is True
     generated['items'][0]['quote'] = 'invented'
     with pytest.raises(DomainError):
         extraction.generate(TEXT)
-    # Invalid output releases the single-inference lock, so another request can succeed.
+    # A rejected answer leaves nothing behind, so the next request can succeed.
     generated['items'][0]['quote'] = 's1'
     assert extraction.generate(TEXT)[0].items[0].quote in TEXT

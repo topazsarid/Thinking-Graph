@@ -90,15 +90,32 @@ def apply(engine, command, actor_id='local:user', actor_name='משתמשת מק�
                 table = m.workspaces if action == 'workspace' else m.conversations
                 db.execute(table.insert().values(id=result_id, title=payload['title'], **provenance()))
                 audit(result_id, action, 'create', {'title': payload['title']})
+            elif action == 'conversation-preference':
+                result_id = payload['id']
+                before = require(m.conversations, result_id)
+                values = dict(answer_preference=payload['preference'].strip())
+                db.execute(m.conversations.update().where(m.conversations.c.id == result_id).values(**values))
+                audit(result_id, 'conversation', 'answer-preference', values,
+                      {'answer_preference': before['answer_preference']})
             elif action == 'note':
                 result_id = payload['id'] or result_id
                 before = require(m.notes, result_id) if payload['id'] else None
-                values = dict(title=payload['title'], content=payload['content'], updated_at=now)
+                kind = payload['kind'] or (before['kind'] if before else 'general')
+                values = dict(title=payload['title'], content=payload['content'], updated_at=now,
+                              kind=kind, completed=bool(before and before['completed']) if kind == 'task' else False)
                 if before:
                     db.execute(m.notes.update().where(m.notes.c.id == result_id).values(**values))
                 else:
                     db.execute(m.notes.insert().values(id=result_id, **values, **provenance()))
                 audit(result_id, 'note', 'revise' if before else 'create', values, before)
+            elif action == 'complete-note':
+                result_id = payload['id']
+                before = require(m.notes, result_id)
+                if before['kind'] != 'task':
+                    raise DomainError('רק פתק מסוג משימה ניתן לסמן כבוצע', 422)
+                values = dict(completed=payload['completed'], updated_at=now)
+                db.execute(m.notes.update().where(m.notes.c.id == result_id).values(**values))
+                audit(result_id, 'note', 'complete', values, before)
             elif action == 'snapshot-notes':
                 require(m.workspaces, payload['workspaceId'])
                 note_ids = list(dict.fromkeys(payload['noteIds']))

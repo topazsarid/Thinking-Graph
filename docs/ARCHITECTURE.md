@@ -11,14 +11,26 @@
 - `backend/main.py`: HTTP routes, validation/error handling, local-origin/host checks.
   `schemas.py`: Pydantic command contracts. `service.py`: transactional graph commands,
   audit events and retry receipts. `database.py`: SQLAlchemy SQLite + startup Alembic.
-- `backend/extraction.py`: local Ollama at loopback:11434; default `qwen3.5:4b`,
-  configurable via `THINKING_GRAPH_MODEL`. `ExtractionReview.tsx` approves proposals;
+- `backend/ollama.py`: the only Ollama client. Streams answers; URL from
+  `THINKING_GRAPH_OLLAMA_URL` (default http://127.0.0.1:11434), never via env proxies.
+  `backend/ai_queue.py`: in-memory FIFO for ALL model work (extraction, replies, smart
+  search); `GET /api/queue`, `POST /api/queue/{id}/cancel` (waiting: removed; running: the
+  stream is closed so Ollama stops). Cancelled requests return HTTP 410.
+- `backend/replies.py` + `POST /api/replies` (requestId = reply id, retry-safe): modes
+  `self` (mirror only), `external` (general knowledge + one concept for the Explanation
+  screen), `search` (model picks existing idea ids). Stored in `chat_replies`, created_by
+  `assistant:local`; never extracted, never added to My Map. Prompts use the
+  conversation's `answer_preference`.
+- UI: `MessageReplies.tsx` (3 buttons per message; plain-text search in `mapSearch.ts`
+  first, AI search only on request), `ModelQueue.tsx`, `ExplanationPanel.tsx`,
+  `AnswerPreference.tsx`. Replies and extraction do not use the app's busy lock.
+- `backend/extraction.py`: default model `qwen3.5:4b`, configurable via `THINKING_GRAPH_MODEL`. `ExtractionReview.tsx` approves proposals;
   `requestExtraction.ts` recovers a lost response by looking up the request ID.
 
 ## Persistence and invariants
 
 Authoritative schema: `backend/models.py`; migrations: `migrations/versions/`
-(current head `20261002_notes`). Add migrations; never rewrite applied migrations.
+(current head `20261012_chat_replies`). Add migrations; never rewrite applied migrations.
 
 - `users`, `conversations`, `messages`; messages belong to conversations.
 - `ideas`, `workspaces`, `workspace_ideas`, `message_ideas`: many-to-many reuse and sources.
@@ -27,6 +39,7 @@ Authoritative schema: `backend/models.py`; migrations: `migrations/versions/`
   use participant roles; approved extraction may use source/target roles. Soft deletion
   uses `deleted_at` and is reversible without losing identity or participants.
 - `relation_types` (parent hierarchy), `relation_aliases`: explicit type/alias records.
+- `notes`: general/task kind and persistent completion (complete-note command); old notes default to general.
 - `notes`, `note_message_sources`: timestamps and immutable copies of notes used in a
   source message. Later note edits do not rewrite extraction evidence.
 - `extraction_runs`: proposal/review/status. `events`: before/after audit.

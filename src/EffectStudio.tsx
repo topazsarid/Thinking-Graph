@@ -1,47 +1,126 @@
-import {useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import FlowerBirds from './FlowerBirds';
 import GrowingGarden from './GrowingGarden';
 import FireScreen from './FireScreen';
 
-export type EffectConfig={kind:'garden'|'birds'|'fire';color:string;speed:number;density:number;area:'full'|'bottom'|'edges'};
+// Browser-local effects. The studio creates two kinds (2026-10-13):
+// - pattern: a print drawn on a grid of squares (more squares = more detail), tiled over the screen;
+// - images: up to 8 uploaded pictures that float freely around the screen.
+// garden/birds/fire remain only so effects saved earlier still play.
+export type EffectConfig={kind:'garden'|'birds'|'fire'|'pattern'|'images';color:string;speed:number;density:number;area:'full'|'bottom'|'edges';
+ pattern?:{size:number;cells:(string|null)[]};tile?:number;images?:string[]};
 type SavedEffect={id:string;name:string;config:EffectConfig};
-const defaults:EffectConfig={kind:'garden',color:'#e85b9d',speed:1,density:1,area:'full'};
 const storageKey='thinking-graph:effects:v1';
-export function validEffect(value:any):value is EffectConfig{return !!value&&['garden','birds','fire'].includes(value.kind)&&/^#[0-9a-f]{6}$/i.test(value.color)&&Number.isFinite(value.speed)&&value.speed>=.25&&value.speed<=2&&Number.isFinite(value.density)&&value.density>=.3&&value.density<=1.5&&['full','bottom','edges'].includes(value.area);}
-export function parseEffect(text:string,base:EffectConfig):{config:EffectConfig;message:string}{
- const config={...base};const found:string[]=[];
- const kinds:Array<[RegExp,EffectConfig['kind']]>=[[/אש|מדורה|בוער/,'fire'],[/ציפור|ציפורים/,'birds'],[/גן|פרח|פרחים|צמח|צמחים/,'garden']];
- const matches=kinds.filter(([pattern])=>pattern.test(text));
- // Flower birds is one supported effect, rather than two conflicting effects.
- if(matches.some(([,kind])=>kind==='birds')&&!matches.some(([,kind])=>kind==='fire')){config.kind='birds';found.push('ציפורים');}
- else if(matches.length===1){config.kind=matches[0][1];found.push('סוג אפקט');}
- else if(matches.length>1)return {config:base,message:'יש כאן כמה אפקטים שונים. בחרי אפקט אחד בעורך.'};
- const colors:Array<[RegExp,string]>=[[/ורוד/,'#e85b9d'],[/כחול/,'#245dcc'],[/ירוק/,'#215b4b'],[/סגול/,'#7639a7'],[/כתום/,'#ed6c02'],[/אדום/,'#c62828'],[/צהוב/,'#ffcf33'],[/לבן/,'#ffffff']];
- const colorMatches=colors.filter(([pattern])=>pattern.test(text));
- if(colorMatches.length===1){config.color=colorMatches[0][1];found.push('צבע');}
- if(/איטי|לאט/.test(text)){config.speed=.5;found.push('מהירות');}else if(/מהיר/.test(text)){config.speed=1.7;found.push('מהירות');}
- if(/מעט|דליל|עדין/.test(text)){config.density=.5;found.push('צפיפות');}else if(/הרבה|צפוף/.test(text)){config.density=1.5;found.push('צפיפות');}
- if(/שוליים|בשולי|מסביב/.test(text)){config.area='edges';found.push('מיקום');}else if(/למטה|תחתית/.test(text)){config.area='bottom';found.push('מיקום');}else if(/כל המסך/.test(text)){config.area='full';found.push('מיקום');}
- return {config,message:found.length?`עודכנו: ${found.join(', ')}. זהו פירוש לפי מילים מוכרות בלבד; בדקי את השדות. פרטים אחרים בתיאור לא פורשו.`:'לא זוהתה הוראה נתמכת. אפשר לבחור את ההגדרות ידנית; התיאור לא שינה דבר.'};
+const MAX_IMAGES=8,IMAGE_PX=180;
+const hexColor=/^#[0-9a-f]{6}$/i;
+function blankPattern(size:number){return {size,cells:Array<string|null>(size*size).fill(null)};}
+const defaults:EffectConfig={kind:'pattern',color:'#e85b9d',speed:1,density:.6,area:'full',pattern:blankPattern(8),tile:80,images:[]};
+
+export function validEffect(value:any):value is EffectConfig{
+ if(!value||!['garden','birds','fire','pattern','images'].includes(value.kind)||!hexColor.test(value.color)||!Number.isFinite(value.speed)||value.speed<.25||value.speed>2||!Number.isFinite(value.density)||value.density<.1||value.density>1.5||!['full','bottom','edges'].includes(value.area))return false;
+ if(value.kind==='pattern'){const p=value.pattern;return !!p&&Number.isInteger(p.size)&&p.size>=3&&p.size<=24&&Array.isArray(p.cells)&&p.cells.length===p.size*p.size&&p.cells.every((c:any)=>c===null||hexColor.test(c))&&Number.isFinite(value.tile)&&value.tile>=24&&value.tile<=240;}
+ if(value.kind==='images')return Array.isArray(value.images)&&value.images.length>=1&&value.images.length<=MAX_IMAGES&&value.images.every((s:any)=>typeof s==='string'&&s.startsWith('data:image/')&&s.length<600000);
+ return true;
 }
+export function loadSavedEffects():SavedEffect[]{try{const data=JSON.parse(localStorage.getItem(storageKey)||'[]');return Array.isArray(data)?data.filter((x:any)=>typeof x.id==='string'&&typeof x.name==='string'&&validEffect(x.config)).slice(0,24):[];}catch{return [];}}
+function storeEffects(list:SavedEffect[]){localStorage.setItem(storageKey,JSON.stringify(list));}
+
+// Draws the grid once into an image and repeats it over the effect area, drifting slowly.
+function PatternLayer({config}:{config:EffectConfig}){
+ const p=config.pattern!,tile=config.tile||80;
+ const url=useMemo(()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=p.size*8;const ctx=canvas.getContext('2d')!;ctx.imageSmoothingEnabled=false;
+  p.cells.forEach((c,i)=>{if(c){ctx.fillStyle=c;ctx.fillRect((i%p.size)*8,Math.floor(i/p.size)*8,8,8);}});return canvas.toDataURL();},[p.size,p.cells]);
+ return <div className="pattern-layer" style={{backgroundImage:`url(${url})`,backgroundSize:`${tile}px ${tile}px`,opacity:Math.min(.9,config.density),animationDuration:`${Math.round(60/config.speed)}s`,['--tile' as any]:`${tile}px`}}/>;
+}
+
+// Each picture floats on its own path and bounces off the screen edges.
+function FloatingImages({config}:{config:EffectConfig}){
+ const box=useRef<HTMLDivElement>(null);
+ const copies=Math.max(1,Math.round(config.density*2));
+ const items=useMemo(()=>(config.images||[]).flatMap((src,i)=>Array.from({length:copies},(_,c)=>({key:`${i}-${c}`,src}))),[config.images,copies]);
+ useEffect(()=>{
+  const root=box.current;if(!root)return;
+  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const nodes=[...root.querySelectorAll<HTMLImageElement>('img')];
+  const state=nodes.map(()=>({x:Math.random()*(window.innerWidth-120),y:Math.random()*(window.innerHeight-120),vx:(Math.random()-.5)*1.6,vy:(Math.random()-.5)*1.6,r:Math.random()*360,vr:(Math.random()-.5)*.4}));
+  let frame=0,last=performance.now();
+  function step(now:number){
+   const dt=Math.min(50,now-last)/16.7*config.speed;last=now;
+   const w=root!.clientWidth,h=root!.clientHeight;
+   nodes.forEach((node,i)=>{const s=state[i],size=node.offsetWidth||100;
+    if(!reduce){s.x+=s.vx*dt;s.y+=s.vy*dt;s.r+=s.vr*dt;}
+    if(s.x<0||s.x>w-size){s.vx*=-1;s.x=Math.max(0,Math.min(w-size,s.x));}
+    if(s.y<0||s.y>h-size){s.vy*=-1;s.y=Math.max(0,Math.min(h-size,s.y));}
+    node.style.transform=`translate(${s.x}px,${s.y}px) rotate(${s.r}deg)`;});
+   frame=requestAnimationFrame(step);
+  }
+  frame=requestAnimationFrame(step);
+  return()=>cancelAnimationFrame(frame);
+ },[items,config.speed]);
+ return <div ref={box} className="floating-images">{items.map(item=><img key={item.key} src={item.src} alt=""/>)}</div>;
+}
+
 export function CustomEffect({config}:{config:EffectConfig}){
  const props={color:config.color,speed:config.speed,density:config.density};
- return <div className={`custom-effect-layer effect-area-${config.area}`} aria-hidden="true">{config.kind==='garden'?<GrowingGarden {...props}/>:config.kind==='birds'?<FlowerBirds {...props}/>:<FireScreen {...props}/>}</div>;
+ const content=config.kind==='pattern'?<PatternLayer config={config}/>:config.kind==='images'?<FloatingImages config={config}/>:
+  config.kind==='garden'?<GrowingGarden {...props}/>:config.kind==='birds'?<FlowerBirds {...props}/>:<FireScreen {...props}/>;
+ return <div className={`custom-effect-layer effect-area-${config.area}`} aria-hidden="true">{content}</div>;
 }
-export default function EffectStudio({onApply,onStop,active}:{onApply:(config:EffectConfig)=>void;onStop:()=>void;active:boolean}){
- const [open,setOpen]=useState(false),[config,setConfig]=useState<EffectConfig>(defaults),[prompt,setPrompt]=useState(''),[name,setName]=useState(''),[message,setMessage]=useState('');
- const [saved,setSaved]=useState<SavedEffect[]>(()=>{try{const data=JSON.parse(localStorage.getItem(storageKey)||'[]');return Array.isArray(data)?data.filter(x=>typeof x.id==='string'&&typeof x.name==='string'&&validEffect(x.config)).slice(0,24):[];}catch{return [];}});
- function save(){if(!name.trim()){setMessage('תני שם לאפקט לפני השמירה.');return;}if(saved.length>=24){setMessage('ניתן לשמור עד 24 אפקטים.');return;}const next=[...saved,{id:crypto.randomUUID(),name:name.trim(),config:{...config}}];try{localStorage.setItem(storageKey,JSON.stringify(next));setSaved(next);setMessage('האפקט נשמר בדפדפן הזה.');}catch{setMessage('לא ניתן לשמור באחסון הדפדפן. אפשר עדיין להפעיל תצוגה מקדימה.');}}
- return <><button className="secondary" onClick={()=>setOpen(true)}>יצירת אפקט</button>{active&&<button className="secondary" onClick={onStop}>כיבוי האפקט שלי</button>}<Dialog open={open} onOpenChange={setOpen}><DialogContent dir="rtl" className="detail-dialog"><DialogTitle>סטודיו לאפקטים</DialogTitle><DialogDescription>הרכיבי אפקט מקומי. אין מודל AI או שליחת מידע לשירות חיצוני.</DialogDescription>
- <label>מה תרצי לראות?<textarea maxLength={500} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="למשל: גן ורוד שגדל לאט מסביב למסך"/></label><button className="secondary" disabled={!prompt.trim()} onClick={()=>{const result=parseEffect(prompt,config);setConfig(result.config);setMessage(result.message);}}>פירוש התיאור</button>
- <label>אפקט<select value={config.kind} onChange={e=>setConfig({...config,kind:e.target.value as EffectConfig['kind']})}><option value="garden">גן צומח</option><option value="birds">ציפורים מפרחים</option><option value="fire">אש</option></select></label>
- <label>צבע<input aria-label="צבע האפקט" type="color" value={config.color} onChange={e=>setConfig({...config,color:e.target.value})}/></label>
- <label>מהירות · {config.speed.toFixed(2)}×<input type="range" min=".25" max="2" step=".05" value={config.speed} onChange={e=>setConfig({...config,speed:Number(e.target.value)})}/></label>
- <label>צפיפות · {Math.round(config.density*100)}%<input type="range" min=".3" max="1.5" step=".1" value={config.density} onChange={e=>setConfig({...config,density:Number(e.target.value)})}/></label>
- <label>מיקום<select value={config.area} onChange={e=>setConfig({...config,area:e.target.value as EffectConfig['area']})}><option value="full">כל המסך</option><option value="bottom">תחתית המסך</option><option value="edges">שולי המסך</option></select></label>
- <button className="primary" onClick={()=>{onApply({...config});setOpen(false);}}>הפעלה לתצוגה מקדימה</button>
- <label>שם לאפקט שלי<input maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="הגן הוורוד שלי"/></label><button className="secondary" onClick={save}>שמירה לאפקטים שלי</button>
- {message&&<p role="status" className="muted">{message}</p>}<h3>האפקטים שלי · {saved.length}</h3>{!saved.length&&<p className="muted">אפקטים שתשמרי יופיעו כאן, גם אחרי רענון באותו דפדפן.</p>}<div className="saved-effects">{saved.map(item=><button key={item.id} className="secondary" onClick={()=>{setConfig(item.config);setName(item.name);onApply({...item.config});setOpen(false);}}>{item.name}</button>)}</div>
- </DialogContent></Dialog></>;
+
+// Shrinks an uploaded picture so several fit in browser storage.
+function shrink(file:File):Promise<string>{
+ return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file);const img=new Image();
+  img.onload=()=>{const scale=Math.min(1,IMAGE_PX/Math.max(img.width,img.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
+   canvas.getContext('2d')!.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);resolve(canvas.toDataURL('image/png'));};
+  img.onerror=()=>{URL.revokeObjectURL(url);reject(Error('bad image'));};img.src=url;});
+}
+function resample(pattern:{size:number;cells:(string|null)[]},size:number){
+ return {size,cells:Array.from({length:size*size},(_,i)=>{const x=Math.floor((i%size)*pattern.size/size),y=Math.floor(Math.floor(i/size)*pattern.size/size);return pattern.cells[y*pattern.size+x]??null;})};
+}
+
+export default function EffectStudio({open,onOpenChange,onApply}:{open:boolean;onOpenChange:(open:boolean)=>void;onApply:(config:EffectConfig)=>void}){
+ const [config,setConfig]=useState<EffectConfig>(defaults),[name,setName]=useState(''),[message,setMessage]=useState(''),[erase,setErase]=useState(false);
+ const [saved,setSaved]=useState<SavedEffect[]>(loadSavedEffects);
+ const painting=useRef(false);
+ const pattern=config.pattern||blankPattern(8);
+ useEffect(()=>{if(open)setSaved(loadSavedEffects());},[open]);
+ function paint(i:number){setConfig(c=>{const p=c.pattern||blankPattern(8);const cells=[...p.cells];cells[i]=erase?null:c.color;return {...c,pattern:{...p,cells}};});}
+ function randomFill(){const palette=[config.color,'#ffffff',null,null];setConfig(c=>({...c,pattern:{...pattern,cells:pattern.cells.map(()=>palette[Math.floor(Math.random()*palette.length)])}}));}
+ async function addImages(files:FileList|null){
+  if(!files)return;const room=MAX_IMAGES-(config.images||[]).length;const chosen=[...files].filter(f=>f.type.startsWith('image/')).slice(0,room);
+  if(!chosen.length){setMessage(room?'בחרי קובצי תמונה.':`אפשר עד ${MAX_IMAGES} תמונות.`);return;}
+  try{const urls=await Promise.all(chosen.map(shrink));setConfig(c=>({...c,images:[...(c.images||[]),...urls]}));setMessage('');}catch{setMessage('אחת התמונות לא נפתחה. נסי קובץ אחר.');}
+ }
+ const ready=config.kind==='pattern'?pattern.cells.some(Boolean):(config.images||[]).length>0;
+ function finalConfig():EffectConfig{return config.kind==='pattern'?{...config,images:undefined}:{...config,pattern:undefined,tile:undefined};}
+ function save(){
+  if(!name.trim()){setMessage('תני שם לאפקט לפני השמירה.');return;}
+  if(saved.length>=24){setMessage('ניתן לשמור עד 24 אפקטים. מחקי אפקט ישן.');return;}
+  const next=[...saved,{id:crypto.randomUUID(),name:name.trim(),config:finalConfig()}];
+  try{storeEffects(next);setSaved(next);setMessage('האפקט נשמר בדפדפן הזה ויופיע בתפריט האפקטים.');}catch{setMessage('אין מספיק מקום באחסון הדפדפן (תמונות תופסות מקום). אפשר להפעיל בלי לשמור, או להשתמש בפחות תמונות.');}
+ }
+ function remove(id:string){const next=saved.filter(s=>s.id!==id);try{storeEffects(next);}catch{}setSaved(next);}
+ return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent dir="rtl" className="detail-dialog effect-studio"><DialogTitle>יצירת אפקט</DialogTitle><DialogDescription>הדפס משבצות או תמונות שמרחפות במסך. הכול נשמר רק בדפדפן הזה.</DialogDescription>
+  <div className="studio-kinds" role="radiogroup" aria-label="סוג האפקט">{([['pattern','הדפס'],['images','תמונות']] as const).map(([kind,label])=><button key={kind} role="radio" aria-checked={config.kind===kind} className={config.kind===kind?'primary':'secondary'} onClick={()=>setConfig(c=>({...c,kind}))}>{label}</button>)}</div>
+  {config.kind==='pattern'?<>
+   <label>מספר משבצות בכל שורה · {pattern.size} (יותר משבצות = הדפס מפורט יותר)<input type="range" min="3" max="24" step="1" value={pattern.size} onChange={e=>setConfig(c=>({...c,pattern:resample(c.pattern||blankPattern(8),Number(e.target.value))}))}/></label>
+   <div className="row studio-tools"><label className="inline-check">צבע<input aria-label="צבע המכחול" type="color" value={config.color} onChange={e=>{setConfig({...config,color:e.target.value});setErase(false);}}/></label>
+    <button className={erase?'primary':'secondary'} aria-pressed={erase} onClick={()=>setErase(v=>!v)}>מחק</button><button className="secondary" onClick={randomFill}>מילוי אקראי</button><button className="secondary" onClick={()=>setConfig(c=>({...c,pattern:blankPattern(pattern.size)}))}>ניקוי</button></div>
+   <div className="pattern-grid" style={{gridTemplateColumns:`repeat(${pattern.size},1fr)`}} onPointerLeave={()=>{painting.current=false;}} onPointerUp={()=>{painting.current=false;}}>
+    {pattern.cells.map((cell,i)=><button key={i} aria-label={`משבצת ${i+1}`} style={{background:cell||'transparent'}} onPointerDown={e=>{e.preventDefault();painting.current=true;paint(i);}} onPointerEnter={()=>{if(painting.current)paint(i);}}/>)}
+   </div>
+   <label>גודל ההדפס במסך · {config.tile}px<input type="range" min="24" max="240" step="4" value={config.tile||80} onChange={e=>setConfig({...config,tile:Number(e.target.value)})}/></label>
+  </>:<>
+   <label>העלאת תמונות (עד {MAX_IMAGES})<input type="file" accept="image/*" multiple onChange={e=>{void addImages(e.target.files);e.target.value='';}}/></label>
+   <div className="studio-images">{(config.images||[]).map((src,i)=><span key={i}><img src={src} alt={`תמונה ${i+1}`}/><button aria-label={`הסרת תמונה ${i+1}`} onClick={()=>setConfig(c=>({...c,images:(c.images||[]).filter((_,n)=>n!==i)}))}>×</button></span>)}</div>
+  </>}
+  <label>מהירות · {config.speed.toFixed(2)}×<input type="range" min=".25" max="2" step=".05" value={config.speed} onChange={e=>setConfig({...config,speed:Number(e.target.value)})}/></label>
+  <label>{config.kind==='pattern'?'עוצמה':'כמות'} · {Math.round(config.density*100)}%<input type="range" min=".1" max="1.5" step=".1" value={config.density} onChange={e=>setConfig({...config,density:Number(e.target.value)})}/></label>
+  <label>מיקום<select value={config.area} onChange={e=>setConfig({...config,area:e.target.value as EffectConfig['area']})}><option value="full">כל המסך</option><option value="bottom">תחתית המסך</option><option value="edges">שולי המסך</option></select></label>
+  <button className="primary" disabled={!ready} onClick={()=>{onApply(finalConfig());onOpenChange(false);}}>הפעלה</button>
+  <label>שם לאפקט<input maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="ההדפס הוורוד שלי"/></label><button className="secondary" disabled={!ready} onClick={save}>שמירה לאפקטים שלי</button>
+  {message&&<p role="status" className="muted">{message}</p>}
+  {saved.length>0&&<><h3>האפקטים שלי · {saved.length}</h3><div className="saved-effects">{saved.map(item=><span key={item.id} className="saved-effect"><button className="secondary" onClick={()=>{onApply({...item.config});onOpenChange(false);}}>{item.name}</button><button className="icon-button" aria-label={`מחיקת ${item.name}`} onClick={()=>remove(item.id)}>×</button></span>)}</div></>}
+ </DialogContent></Dialog>;
 }

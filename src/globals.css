@@ -124,3 +124,87 @@ body{color:var(--foreground);background:hsl(var(--hue) 25% 97%)}.primary,.brand-
 .dialog-move-bar span{flex:1}.dialog-move-bar button{background:var(--secondary);border-radius:6px;width:30px;height:30px;font-size:18px}
 .map-selection-box{fill:var(--accent);fill-opacity:.35;stroke:var(--primary);stroke-width:1;stroke-dasharray:5 4;pointer-events:none}
 .map-edge.group-selected rect{stroke:var(--primary);stroke-width:3}.map-node .node-actions{flex-wrap:wrap}.map-group-status{font-size:12px;align-self:center}
+/* Chat replies (2026-10-12): assistant text is visually distinct from the user's own words. */
+.message-replies{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.reply-actions{display:flex;flex-wrap:wrap;gap:6px}
+.reply-choice{font-size:12px;padding:5px 9px;border-radius:999px;border:1px solid var(--border);background:#fff;color:#35584c}
+.reply-choice:hover:not(:disabled){background:#edf4f0}
+.reply-choice.reply-self{border-style:dashed}
+.reply-choice.reply-external{border-color:#b9a4d6;color:#5b4386}
+.assistant-reply{border:1px solid #dfe7e3;border-inline-start:3px solid #8fb3a4;background:#f7faf9;border-radius:8px;padding:8px 10px}
+.assistant-reply small{display:block;font-size:11px;color:#6d817a;margin-bottom:2px}
+.assistant-reply p{margin:4px 0;font-size:14px;white-space:pre-wrap}
+.assistant-reply.reply-self{border-inline-start-style:dashed;background:#fbfcfb}
+.assistant-reply.reply-external{border-inline-start-color:#9b82c4;background:#f8f6fc}
+.link-chip{font-size:12px;background:#eaf5ee;color:#2f6a52;padding:3px 8px;border-radius:5px;margin:2px;overflow-wrap:anywhere}
+.link-chip:disabled{opacity:.6}
+.chat-tools{display:flex;gap:12px;flex-wrap:wrap}.chat-tools .text-button{margin-top:8px}
+.model-queue{position:fixed;left:16px;bottom:16px;z-index:60;width:min(340px,calc(100vw - 32px));background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px #0002;font-size:13px}
+.model-queue-head{width:100%;text-align:right;padding:9px 12px;font-weight:600;border-bottom:1px solid var(--border)}
+.model-queue ol{list-style:none;margin:0;padding:6px;max-height:40vh;overflow:auto}
+.model-queue li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px;border-radius:6px}
+.model-queue li.queue-running{background:#eef6f1}
+.model-queue li small{color:#6d817a;overflow-wrap:anywhere}
+.model-queue li .secondary{padding:5px 9px;font-size:12px;flex:none}
+.explanation-panel{position:fixed;top:90px;left:16px;z-index:55;width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 120px);overflow:auto;background:#fcfbff;border:1px solid #d9d0ea;border-radius:12px;box-shadow:0 10px 32px #0002;padding:14px}
+.explanation-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.explanation-head .secondary{padding:5px 10px;font-size:12px}
+.explanation-concepts{display:flex;flex-direction:column;gap:10px}
+.explanation-concept{border:1px solid #d9d0ea;border-radius:10px;background:#fff;padding:10px 12px}
+.explanation-concept p{margin:6px 0;font-size:14px}
+@media(max-width:650px){.explanation-panel{top:64px;left:8px;width:calc(100vw - 16px)}.model-queue{left:8px;bottom:8px;width:calc(100vw - 16px)}}
+/* Adjustable writing box (2026-10-13): the message list grows when the box shrinks. */
+.composer textarea{min-height:40px;resize:none}
+.composer>div{gap:8px;flex-wrap:wrap}
+.composer .chat-tools{display:flex;gap:10px}.composer .chat-tools .text-button{margin:0}
+.composer-grip{flex:none;height:14px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;margin:2px 0}
+.composer-grip span{width:44px;height:4px;border-radius:4px;background:var(--border)}
+.composer-grip:hover span,.composer-grip:focus-visible span{background:var(--primary)}
+.floating-window-body>.chat{display:flex;flex-direction:column}
+.floating-window-body>.chat .messages{flex:1 1 auto;min-height:60px;max-height:none}
+/* Top bar (2026-10-13): stays in place; second bar can be hidden; menus for effects and notes. */
+.workspace-page>.topbar{position:sticky;top:0;z-index:45;background:#fffffff2;backdrop-filter:blur(6px)}
+.topbar .row>.secondary{display:inline-flex;align-items:center;gap:6px}
+.status:empty{display:none}
+@media(min-width:651px){.bar-hidden .floating-board{height:calc(100dvh - 170px)}}
+.top-menu [role=menuitemcheckbox]{padding:10px;border-radius:7px;cursor:pointer;outline:none}
+.top-menu [role=menuitemcheckbox][data-highlighted]{background:var(--primary);color:var(--primary-foreground,#fff)}
+.menu-separator{height:1px;background:var(--border);margin:5px 4px}
+.menu-label{font-size:12px;color:var(--muted-foreground);padding:4px 10px}
+/* Conversation side menu: hover the screen edge, or use the "שיחות" button. */
+.drawer-edge{position:fixed;top:0;bottom:0;width:8px;z-index:70}
+.drawer-edge-right{right:0}.drawer-edge-left{left:0}
+.conversation-drawer{position:fixed;top:0;bottom:0;z-index:80;width:min(300px,86vw);background:#fff;box-shadow:0 0 32px #0003;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.conversation-drawer.drawer-right{right:0;border-left:1px solid var(--border)}
+.conversation-drawer.drawer-left{left:0;border-right:1px solid var(--border)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between}
+.conversation-drawer ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.conversation-drawer li button{width:100%;text-align:right;padding:9px 10px;border-radius:8px;display:flex;flex-direction:column;gap:2px}
+.conversation-drawer li button:hover{background:#edf4f0}
+.conversation-drawer li button.active{background:#e3efe9;box-shadow:inset 3px 0 0 var(--primary)}
+.conversation-drawer li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conversation-drawer li small{font-size:11px;color:var(--muted-foreground)}
+/* Effect studio: pattern grid editor and image list; the effects themselves. */
+.studio-kinds{display:flex;gap:8px;margin:8px 0}
+.studio-tools{flex-wrap:wrap;margin:8px 0}.studio-tools input[type=color]{width:44px;height:32px;padding:2px;margin:0 6px 0 0}
+.pattern-grid{display:grid;width:min(100%,320px);aspect-ratio:1;margin:6px 0 12px;border:1px solid var(--border);touch-action:none;background:repeating-conic-gradient(#f1f1f1 0 25%,#fff 0 50%) 0 0/16px 16px}
+.pattern-grid button{border:0;border-right:1px solid #0000000f;border-bottom:1px solid #0000000f;padding:0;min-width:0;border-radius:0}
+.studio-images{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.studio-images span{position:relative}.studio-images img{width:64px;height:64px;object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#fafafa}
+.studio-images button{position:absolute;top:-6px;left:-6px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid var(--border);line-height:1}
+.saved-effect{display:inline-flex;align-items:center}
+.pattern-layer{position:absolute;inset:-240px;background-repeat:repeat;image-rendering:pixelated;animation:pattern-drift linear infinite}
+@keyframes pattern-drift{from{transform:translate(0,0)}to{transform:translate(var(--tile),var(--tile))}}
+.floating-images{position:absolute;inset:0;overflow:hidden}
+.floating-images img{position:absolute;top:0;left:0;width:96px;height:auto;max-height:120px;object-fit:contain;will-change:transform}
+@media(prefers-reduced-motion:reduce){.pattern-layer{animation:none}}
+/* 2026-10-13 b: focus mode, hideable writing box, drawing zoom. */
+.focus-mode>.topbar,.focus-mode>.workspace-bar,.focus-mode .floating-panel-toolbar{display:none!important}
+.focus-mode .floating-board{height:100dvh!important;min-height:0!important}
+.focus-exit{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:60;display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;border-radius:999px;background:#ffffffe6;border:1px solid var(--border);box-shadow:0 4px 14px #0002;opacity:.55}
+.focus-exit:hover,.focus-exit:focus-visible{opacity:1}
+.composer-bar{display:flex;align-items:center;gap:6px}.composer-bar .composer-grip{flex:1}
+.composer-hide{flex:none;padding:2px 6px;border-radius:6px;color:var(--muted-foreground)}.composer-hide:hover{background:#edf4f0}
+.composer-show{flex:none;align-self:center;display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;margin-top:6px;border-radius:999px;border:1px solid var(--border);background:#fff;color:#35584c}
+.drawing-zoom{gap:4px}.drawing-zoom .secondary{padding:6px 10px;min-width:36px}
+.drawing-canvas.pan-mode{cursor:grab}.drawing-canvas.pan-mode:active{cursor:grabbing}

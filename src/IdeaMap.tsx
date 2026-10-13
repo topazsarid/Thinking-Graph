@@ -4,7 +4,7 @@ import {ContextMenu} from 'radix-ui';
 import {useEffect,useRef,useState,type PointerEvent} from 'react';
 type Point={x:number;y:number;scale?:number};
 type Gesture={kind:'pan'|'move'|'link'|'edge'|'select';id:string;start:Point;original:Point;moved:boolean;pointer:number;group?:Record<string,Point>};
-export default function IdeaMap({ideas,edges,workspaceId,onInspect,onConnect,onConnection,onDelete,onCreate,onQuickCreate,placement,onPlaced,busy}:{ideas:any[];edges:any[];workspaceId:string;onInspect:(id:string)=>void;onConnect:(ids:string[])=>Promise<void>;onConnection:(id:string)=>void;onDelete:(id:string)=>Promise<void>;onQuickCreate:(title:string,point:Point)=>Promise<void>;onCreate:(kind:'idea'|'question',point:Point)=>void;onPlaced:()=>void;placement:{id:string;workspaceId:string;point:Point}|null;busy:boolean}){
+export default function IdeaMap({ideas,edges,workspaceId,onInspect,onConnect,onConnection,onDelete,onCreate,onQuickCreate,placement,onPlaced,busy,reveal}:{ideas:any[];edges:any[];workspaceId:string;onInspect:(id:string)=>void;onConnect:(ids:string[])=>Promise<void>;onConnection:(id:string)=>void;onDelete:(id:string)=>Promise<void>;onQuickCreate:(title:string,point:Point)=>Promise<void>;onCreate:(kind:'idea'|'question',point:Point)=>void;onPlaced:()=>void;placement:{id:string;workspaceId:string;point:Point}|null;busy:boolean;reveal?:{ids:string[];nonce:number}|null}){
  const [shortcuts,setShortcuts]=useState(loadShortcuts),[shortcutsOpen,setShortcutsOpen]=useState(false),[pendingLink,setPendingLink]=useState<string[]|null>(null),[linkBusy,setLinkBusy]=useState(false);
  const linkSaving=useRef(false);
  const [edgeSelection,setEdgeSelection]=useState('');
@@ -109,13 +109,29 @@ export default function IdeaMap({ideas,edges,workspaceId,onInspect,onConnect,onC
    if(g.kind==='link'&&g.moved){const end=hit(point(e),g.id);if(end)stageLink([g.id,end]);else cancel();}
    if(g.kind==='pan'&&!g.moved){setGroup([]);cancel();setSelection('');setEdgeSelection('');}
  }
+ function ideaBox(id:string):Point[]{return [positions[id],{x:positions[id].x+184*shapes[id].scale,y:positions[id].y+(20+shapes[id].height)*shapes[id].scale}];}
  function fitMap(){
-  const pts=[...ideas.flatMap(i=>[positions[i.id],{x:positions[i.id].x+184*shapes[i.id].scale,y:positions[i.id].y+(20+shapes[i.id].height)*shapes[i.id].scale}]),...Object.values(edgeCenters)];if(!pts.length){setPan({x:0,y:0});setZoom(1);cancel();return;}
+  const pts=[...ideas.flatMap(i=>ideaBox(i.id)),...Object.values(edgeCenters)];if(!pts.length){setPan({x:0,y:0});setZoom(1);cancel();return;}
+  frame(pts,1.4);cancel();
+ }
+ // Frames the given points in the visible canvas, never zooming in beyond maxScale.
+ function frame(pts:Point[],maxScale:number){
   const left=Math.min(...pts.map(p=>p.x)),right=Math.max(...pts.map(p=>p.x))+196;
   const top=Math.min(...pts.map(p=>p.y)),bottom=Math.max(...pts.map(p=>p.y))+136;
-  const scale=Math.max(.1,Math.min(1.4,(size.width-60)/(right-left),(size.height-160)/(bottom-top)));
-  setZoom(scale);setPan({x:(size.width-(right-left)*scale)/2-left*scale,y:80+(size.height-160-(bottom-top)*scale)/2-top*scale});cancel();
+  const scale=Math.max(.1,Math.min(maxScale,(size.width-60)/(right-left),(size.height-160)/(bottom-top)));
+  setZoom(scale);setPan({x:(size.width-(right-left)*scale)/2-left*scale,y:80+(size.height-160-(bottom-top)*scale)/2-top*scale});
  }
+ // After an approved extraction, show its ideas. Waits until the map is visible and measured
+ // (on mobile the map may be hidden at first), then frames them once at up to 100% zoom.
+ const pendingReveal=useRef<{ids:string[];nonce:number}|null>(null);
+ useEffect(()=>{if(reveal)pendingReveal.current=reveal;},[reveal?.nonce]);
+ useEffect(()=>{
+  const request=pendingReveal.current,width=svg.current?.getBoundingClientRect().width||0;
+  if(!request||!width||Math.abs(Math.max(240,width)-size.width)>2)return;
+  pendingReveal.current=null;
+  const ids=request.ids.filter(id=>positions[id]);
+  if(ids.length)frame(ids.flatMap(ideaBox),1);
+ });
  function keyboardLink(id:string){if(busy||pendingLink)return;if(source&&source!==id){stageLink([source,id]);cancel();}else{setSource(id);setTip(ideaCenter(id));svg.current?.focus({preventScroll:true});}}
  function mapKey(e:React.KeyboardEvent){
   const element=e.target as Element;

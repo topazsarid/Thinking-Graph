@@ -1,7 +1,7 @@
 import logging
 import json
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from contextlib import asynccontextmanager
@@ -15,13 +15,25 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .database import ROOT, database_path, make_engine, migrate
 from .schemas import GraphCommand
 from .service import apply, snapshot, DomainError
-from . import models as m, extraction
+from typing import Literal
+from . import models as m, extraction, replies, ai_queue
 
 class ExtractionRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     requestId: UUID
     messageId: UUID
     workspaceId: UUID
+
+class ReplyRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    requestId: UUID
+    messageId: UUID
+    workspaceId: UUID | None = None
+    mode: Literal['self', 'external', 'search']
+
+ASSISTANT = ('assistant:local', 'עוזר מקומי · מודל')
+MODE_LABELS = {'self': 'התייעצות עם עצמך', 'external': 'יועץ חיצוני', 'search': 'חיפוש חכם במפה'}
+CANCELLED = 'הבקשה בוטלה.'
 
 def create_app(path: Path | None = None):
     engine = make_engine(path or database_path())
@@ -103,7 +115,12 @@ def create_app(path: Path | None = None):
             if not message or not workspace:
                 raise DomainError('ההודעה או המרחב אינם קיימים', 404)
             content = message['content']
-        proposal, model = extraction.generate(content)
+        extraction.precheck(content)
+        try:
+            proposal, model = ai_queue.run('extraction', 'חילוץ: ' + content[:60],
+                                           lambda: extraction.generate(content), ref=message_id)
+        except ai_queue.Cancelled:
+            raise DomainError(CANCELLED, 410)
         values = dict(id=run_id, message_id=message_id, workspace_id=workspace_id, model=model,
             proposal=proposal.model_dump_json(), review=None, status='pending',
             created_by='local:user', created_at=datetime.now(timezone.utc).isoformat())
@@ -116,6 +133,74 @@ def create_app(path: Path | None = None):
             db.execute(m.extraction_runs.insert().values(**values))
             db.commit()
         return values
+
+    @app.post('/api/replies')
+    def reply_to_message(body: ReplyRequest):
+        # Same retry rule as extraction: the request ID is the reply ID, so a lost response
+        # never starts a second generation. Other app actions keep working meanwhile.
+        reply_id, message_id = str(body.requestId), str(body.messageId)
+        workspace_id = str(body.workspaceId) if body.workspaceId else None
+        def previous(db):
+            row = db.execute(select(m.chat_replies).where(m.chat_replies.c.id == reply_id)).mappings().first()
+            if row and (row['message_id'] != message_id or row['mode'] != body.mode):
+                raise DomainError('מזהה הבקשה כבר משמש לתשובה אחרת', 409)
+            return dict(row) if row else None
+        with engine.connect() as db:
+            existing = previous(db)
+            if existing:
+                return existing
+            message = db.execute(select(m.messages).where(m.messages.c.id == message_id)).mappings().first()
+            if not message:
+                raise DomainError('ההודעה אינה קיימת', 404)
+            if workspace_id and not db.execute(select(m.workspaces.c.id).where(m.workspaces.c.id == workspace_id)).first():
+                raise DomainError('המרחב אינו קיים', 404)
+            conversation = db.execute(select(m.conversations).where(
+                m.conversations.c.id == message['conversation_id'])).mappings().first()
+            earlier = [r['content'] for r in db.execute(select(m.messages.c.content).where(
+                m.messages.c.conversation_id == message['conversation_id'],
+                m.messages.c.created_at < message['created_at']).order_by(m.messages.c.created_at)).mappings()]
+            candidates = [(r['id'], r['title']) for r in db.execute(select(m.ideas.c.id, m.ideas.c.title).where(
+                m.ideas.c.status != 'rejected').order_by(m.ideas.c.created_at.desc())).mappings()] if body.mode == 'search' else None
+        from .ollama import local_model
+        local_model()
+        try:
+            result = ai_queue.run('reply', f"{MODE_LABELS[body.mode]}: {message['content'][:60]}",
+                lambda: replies.generate(body.mode, message['content'], earlier,
+                                         conversation['answer_preference'], candidates), ref=message_id)
+        except ai_queue.Cancelled:
+            raise DomainError(CANCELLED, 410)
+        except (ValueError, KeyError, TypeError):
+            raise DomainError('המודל החזיר תשובה לא תקינה. אפשר לנסות שוב.', 422)
+        except (OSError, TimeoutError):
+            raise DomainError('לא התקבלה תשובה מהמודל המקומי בזמן. ודאי ש־Ollama פועל ושהמודל מותקן, ונסי שוב.', 503)
+        now = datetime.now(timezone.utc).isoformat()
+        values = dict(id=reply_id, message_id=message_id, conversation_id=message['conversation_id'],
+            workspace_id=workspace_id, mode=body.mode, content=result['content'],
+            concept=json.dumps(result['concept'], ensure_ascii=False) if result['concept'] else None,
+            idea_ids=json.dumps(result['idea_ids']) if result['idea_ids'] is not None else None,
+            model=result['model'], created_by=ASSISTANT[0], created_at=now)
+        with engine.connect() as db:
+            db.exec_driver_sql('BEGIN IMMEDIATE')
+            existing = previous(db)
+            if existing:
+                db.rollback()
+                return existing
+            if not db.execute(select(m.users.c.id).where(m.users.c.id == ASSISTANT[0])).first():
+                db.execute(m.users.insert().values(id=ASSISTANT[0], name=ASSISTANT[1]))
+            db.execute(m.chat_replies.insert().values(**values))
+            db.execute(m.events.insert().values(id=str(uuid4()), entity_id=reply_id, entity_type='reply',
+                action='create', before=None, after=json.dumps({'mode': body.mode, 'messageId': message_id,
+                'model': result['model']}, ensure_ascii=False), created_by=ASSISTANT[0], created_at=now))
+            db.commit()
+        return values
+
+    @app.get('/api/queue')
+    def model_queue():
+        return {'items': ai_queue.snapshot()}
+
+    @app.post('/api/queue/{ticket_id}/cancel')
+    def cancel_queued(ticket_id: str):
+        return {'cancelled': ai_queue.cancel(ticket_id)}
 
     dist = ROOT / 'dist'
     if (dist / 'assets').is_dir():

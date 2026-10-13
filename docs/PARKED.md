@@ -7,7 +7,8 @@ Move a specific, user-approved task into NOW before implementing it.
 - Data analysis / MLOps / pattern detection; broader semantic relation taxonomy learning.
 - Cross-device drawing/layout sync (currently localStorage).
 - Obsidian/text import beyond current capture and reviewed extraction.
-- Separate explanation space, Concept/Representation identity, shared focus/glossary,
+- (A minimal Explanation screen for external-advisor replies moved to NOW on 2026-10-12.)
+  Separate explanation space beyond that, Concept/Representation identity, shared focus/glossary,
   Copy vs Represent As, electric-field/chess renderers and constrained chat commands.
   Reuse [design delta](design-delta-2026-10-01.md) and
   [historical mapping](design-delta-mapping-2026-10-01.md); most of this is proposal,
