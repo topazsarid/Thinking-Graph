@@ -1,0 +1,6 @@
+# Store text files with LF line endings in Git, whatever the editor uses locally.
+# This keeps diffs free of Windows (CRLF) vs Unix (LF) noise.
+* text=auto
+*.png binary
+*.jpg binary
+*.sqlite binary

@@ -1,0 +1,24 @@
+# Files Docker must NOT send into the image build.
+# Most important: your private database and personal data never enter an image.
+data/
+backups/
+*.sqlite
+*.sqlite-*
+*.db
+.env*
+
+# Things the image rebuilds itself, or does not need.
+node_modules/
+.venv/
+dist/
+.git/
+docs/
+tests/
+work/
+outputs/
+.codex/
+.agents/
+__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+*.log

@@ -1,0 +1,16 @@
+# Thinking Graph with Docker Compose: one command instead of a long `docker run`.
+#   Start:  docker compose up --build     (--build rebuilds the image if the code changed)
+#   Stop:   Ctrl+C, then `docker compose down` to remove the container.
+#   NEVER use `docker compose down -v` unless you mean it: -v also deletes the data volume.
+services:
+  app:                                # one service = one container
+    build: .                          # build the image from the Dockerfile in this folder
+    image: thinking-graph             # name for the built image
+    ports:
+      - "127.0.0.1:8000:8000"         # Windows port 8000 -> container port 8000, this computer only
+    volumes:
+      - thinking-graph-data:/app/data # the database lives in the volume, not in the container
+
+volumes:
+  thinking-graph-data:
+    name: thinking-graph-data         # the same volume you created in step 2, so its data is reused
