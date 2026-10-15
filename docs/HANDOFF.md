@@ -2,7 +2,16 @@
 
 Last updated: 2026-10-13. Replace this checkpoint; do not append a diary.
 
-## Completed (all uncommitted)
+## Completed
+- 2026-10-13 f: browser E2E suite in the repo: tests/e2e (conftest: fake streaming Ollama on a free
+  port, one uvicorn server + throwaway DB under work/ per test, fresh Chromium context per test;
+  10 tests across map/chat/layout). requirements-e2e.txt (playwright). Skipped when Playwright is not
+  installed; fails early if dist/ is older than src. backend/main.py: Origin check now also accepts
+  the request's own Host (same-origin on any port; Host is still loopback-only). EffectStudio:
+  painting fills every square along the pointer path (fast drags skipped squares). Agent ran the
+  full suite 3x: 39/39 each time (29 API + 10 E2E). Not yet run on the user's Windows machine.
+- Commits so far (user ran them): 0fbc74b Docker + .gitattributes, then code, then docs (4caa8d8).
+  Everything listed below this line up to 2026-10-13 e is committed; f is uncommitted.
 - 2026-10-13 e: Docker step 2 DONE by the user (named volume `thinking-graph-data` at /app/data;
   data survived container removal). Step 3 file written: compose.yaml (service `app`, build ., image
   thinking-graph, 127.0.0.1:8000:8000, volume `thinking-graph-data` with fixed name so the step-2
