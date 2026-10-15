@@ -51,6 +51,10 @@ def create_app(path: Path | None = None):
     async def local_only(request: Request, call_next):
         origin = request.headers.get('origin')
         allowed = {f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost') for port in (8000, 5173)}
+        # Same-origin requests on any port (e.g. a test server). The Host header itself is
+        # still limited to loopback names by TrustedHostMiddleware.
+        if request.headers.get('host'):
+            allowed.add(f"http://{request.headers['host']}")
         if origin and origin not in allowed:
             return JSONResponse({'error': 'מקור הבקשה אינו מורשה'}, status_code=403)
         # A link from another site may open the local home page. This exception

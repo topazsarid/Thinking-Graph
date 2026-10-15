@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import FlowerBirds from './FlowerBirds';
 import GrowingGarden from './GrowingGarden';
@@ -82,10 +82,21 @@ function resample(pattern:{size:number;cells:(string|null)[]},size:number){
 export default function EffectStudio({open,onOpenChange,onApply}:{open:boolean;onOpenChange:(open:boolean)=>void;onApply:(config:EffectConfig)=>void}){
  const [config,setConfig]=useState<EffectConfig>(defaults),[name,setName]=useState(''),[message,setMessage]=useState(''),[erase,setErase]=useState(false);
  const [saved,setSaved]=useState<SavedEffect[]>(loadSavedEffects);
- const painting=useRef(false);
+ // Painting follows the pointer over the grid and fills every square on the way, so a fast drag
+ // never skips squares (pointer events can arrive far apart).
+ const painting=useRef<number|null>(null),gridRef=useRef<HTMLDivElement>(null);
  const pattern=config.pattern||blankPattern(8);
  useEffect(()=>{if(open)setSaved(loadSavedEffects());},[open]);
- function paint(i:number){setConfig(c=>{const p=c.pattern||blankPattern(8);const cells=[...p.cells];cells[i]=erase?null:c.color;return {...c,pattern:{...p,cells}};});}
+ function paintCells(list:number[]){setConfig(c=>{const p=c.pattern||blankPattern(8);const cells=[...p.cells];list.forEach(i=>{cells[i]=erase?null:c.color;});return {...c,pattern:{...p,cells}};});}
+ function cellAt(x:number,y:number){const grid=gridRef.current;if(!grid)return null;const r=grid.getBoundingClientRect(),n=pattern.size;
+  if(x<r.left||y<r.top||x>=r.right||y>=r.bottom)return null;
+  // The grid runs right-to-left (RTL), so column 0 is on the right.
+  const col=n-1-Math.floor((x-r.left)/r.width*n),row=Math.floor((y-r.top)/r.height*n);return row*n+col;}
+ function lineBetween(a:number,b:number){const n=pattern.size;let [x0,y0]=[a%n,Math.floor(a/n)];const [x1,y1]=[b%n,Math.floor(b/n)];
+  const dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let err=dx+dy;const out:number[]=[];
+  for(;;){out.push(y0*n+x0);if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>=dy){err+=dy;x0+=sx;}if(e2<=dx){err+=dx;y0+=sy;}}return out;}
+ function startPaint(e:React.PointerEvent<HTMLDivElement>){const i=cellAt(e.clientX,e.clientY);if(i===null)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);painting.current=i;paintCells([i]);}
+ function movePaint(e:React.PointerEvent<HTMLDivElement>){if(painting.current===null)return;const i=cellAt(e.clientX,e.clientY);if(i===null||i===painting.current)return;paintCells(lineBetween(painting.current,i));painting.current=i;}
  function randomFill(){const palette=[config.color,'#ffffff',null,null];setConfig(c=>({...c,pattern:{...pattern,cells:pattern.cells.map(()=>palette[Math.floor(Math.random()*palette.length)])}}));}
  async function addImages(files:FileList|null){
   if(!files)return;const room=MAX_IMAGES-(config.images||[]).length;const chosen=[...files].filter(f=>f.type.startsWith('image/')).slice(0,room);
@@ -107,8 +118,8 @@ export default function EffectStudio({open,onOpenChange,onApply}:{open:boolean;o
    <label>מספר משבצות בכל שורה · {pattern.size} (יותר משבצות = הדפס מפורט יותר)<input type="range" min="3" max="24" step="1" value={pattern.size} onChange={e=>setConfig(c=>({...c,pattern:resample(c.pattern||blankPattern(8),Number(e.target.value))}))}/></label>
    <div className="row studio-tools"><label className="inline-check">צבע<input aria-label="צבע המכחול" type="color" value={config.color} onChange={e=>{setConfig({...config,color:e.target.value});setErase(false);}}/></label>
     <button className={erase?'primary':'secondary'} aria-pressed={erase} onClick={()=>setErase(v=>!v)}>מחק</button><button className="secondary" onClick={randomFill}>מילוי אקראי</button><button className="secondary" onClick={()=>setConfig(c=>({...c,pattern:blankPattern(pattern.size)}))}>ניקוי</button></div>
-   <div className="pattern-grid" style={{gridTemplateColumns:`repeat(${pattern.size},1fr)`}} onPointerLeave={()=>{painting.current=false;}} onPointerUp={()=>{painting.current=false;}}>
-    {pattern.cells.map((cell,i)=><button key={i} aria-label={`משבצת ${i+1}`} style={{background:cell||'transparent'}} onPointerDown={e=>{e.preventDefault();painting.current=true;paint(i);}} onPointerEnter={()=>{if(painting.current)paint(i);}}/>)}
+   <div ref={gridRef} className="pattern-grid" style={{gridTemplateColumns:`repeat(${pattern.size},1fr)`}} onPointerDown={startPaint} onPointerMove={movePaint} onPointerUp={()=>{painting.current=null;}} onPointerCancel={()=>{painting.current=null;}}>
+    {pattern.cells.map((cell,i)=><button key={i} aria-label={`משבצת ${i+1}`} style={{background:cell||'transparent'}} onKeyDown={e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();paintCells([i]);}}}/>)}
    </div>
    <label>גודל ההדפס במסך · {config.tile}px<input type="range" min="24" max="240" step="4" value={config.tile||80} onChange={e=>setConfig({...config,tile:Number(e.target.value)})}/></label>
   </>:<>
