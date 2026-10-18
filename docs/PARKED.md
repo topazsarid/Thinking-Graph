@@ -1,16 +1,18 @@
 # Parked — not authorized implementation work
 
 Move a specific, user-approved task into NOW before implementing it.
+Several items below are now PROPOSED in [MVP-PLAN](MVP-PLAN.md) (awaiting approval); they stay
+parked until the user approves that plan.
 
-- Phone access beyond loopback: Wi-Fi versus remote access, authentication/authorization.
-- PostgreSQL, Docker, production hosting, multi-user editing/conflict handling.
+- Remote/phone access and authentication — proposed in MVP-PLAN (cloud phase).
+- Cross-device drawing/layout sync (currently localStorage) — proposed in MVP-PLAN (phase 0).
+- Explanation space beyond the current concept list, Copy vs Represent As — proposed in MVP-PLAN
+  (Explanation Map, cross-board copy). Concept/Representation identity, shared focus/glossary,
+  electric-field/chess renderers and constrained chat commands remain parked.
+  Background: [design delta](design-delta-2026-10-01.md), [historical mapping](design-delta-mapping-2026-10-01.md);
+  mostly proposals, not implemented architecture.
+- PostgreSQL, production hosting beyond the MVP-PLAN option, multi-user editing/conflict handling.
+- CD (automatic deployment). CI exists since 2026-10-18.
 - Data analysis / MLOps / pattern detection; broader semantic relation taxonomy learning.
-- Cross-device drawing/layout sync (currently localStorage).
 - Obsidian/text import beyond current capture and reviewed extraction.
-- (A minimal Explanation screen for external-advisor replies moved to NOW on 2026-10-12.)
-  Separate explanation space beyond that, Concept/Representation identity, shared focus/glossary,
-  Copy vs Represent As, electric-field/chess renderers and constrained chat commands.
-  Reuse [design delta](design-delta-2026-10-01.md) and
-  [historical mapping](design-delta-mapping-2026-10-01.md); most of this is proposal,
-  not implemented architecture. Direct map creation from that plan already exists.
 - PWA, offline/service workers, notifications and advanced mobile gestures.

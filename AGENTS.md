@@ -22,6 +22,12 @@ Git safety:
 - Avoid concurrent Git write operations.
 - If a stale lock or repository-state issue occurs, stop and report it rather than forcing a workaround.
 
+Tests and CI:
+
+- Run the relevant checks (README "Tests"); browser E2E needs a fresh `npm run build`.
+- CI (`.github/workflows/ci.yml`) must stay green. Agents cannot write `.github/` through the
+  device bridge: hand workflow changes to the user to add.
+
 Before stopping:
 
 - Run feasible relevant checks; leave code understandable.

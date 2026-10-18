@@ -53,16 +53,25 @@ map positions/scales, shortcuts, theme/pen and drawings; these do NOT sync acros
 
 ## Runtime and checks
 
-Use README's setup/run instructions (Python 3.12 / Node 24 previously tested).
-`start-local.cmd` serves loopback:8000; no authentication or remote-phone access exists.
-Do not weaken Host/Origin protections or expose this instance as a layout fix.
+Use README's setup/run instructions (Python 3.12 / Node 24 tested).
+Two ways to run: `start-local.cmd` (native, `data/`) or Docker (`docker compose up --build`,
+port 127.0.0.1:8000, database in the `thinking-graph-data` volume at /app/data). They use separate
+databases. No authentication or remote-phone access exists.
+Host check: loopback names only. Origin check: ports 8000/5173 plus same-origin on any port.
+Do not weaken these protections or expose this instance as a layout fix.
 
 Relevant checks, from repo root:
 - UI: `npm run build` (includes TypeScript).
 - API/schema: `.venv\Scripts\python.exe -m pytest -q`; `python -m alembic check`
   through the same venv against an appropriate test DB.
 - Map logic: `node --test --experimental-test-isolation=none tests/map_groups.test.ts`.
-- Extraction client: same Node command with `tests/extraction_request.test.ts`.
+- Extraction client: same Node command with `tests/extraction_request.test.ts`
+  (all unit tests at once: `node --test --experimental-test-isolation=none tests/*.test.ts`).
+- Browser E2E: `pytest tests/e2e -q` after `npm run build` (needs `requirements-e2e.txt` and
+  `python -m playwright install chromium`; skipped if Playwright is missing). Each test gets its own
+  server, throwaway DB under `work/`, and a fake streaming Ollama on a random port.
+- CI: `.github/workflows/ci.yml` runs build, unit tests, `alembic check` and all pytest incl. E2E on
+  every push (GitHub Actions, Ubuntu, Python 3.12, Node 24).
 
 Windows has previously blocked pytest temporary/cache directories; report that as an
 environment issue rather than a passing test. Do not depend on scripts outside this repo.
