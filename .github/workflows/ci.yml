@@ -1,0 +1,52 @@
+# Continuous Integration: on every push and pull request, GitHub builds the app in a clean
+# Linux machine and runs every test. A green check next to a commit means all of this passed.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install Python packages (app + browser tests)
+        run: pip install -r requirements.txt -r requirements-e2e.txt
+
+      - name: Install Node packages
+        run: npm ci
+
+      - name: Build the interface (includes the TypeScript check)
+        run: npm run build
+
+      - name: Interface unit tests
+        run: node --test --experimental-test-isolation=none tests/*.test.ts
+
+      - name: Database migrations match the models
+        env:
+          THINKING_GRAPH_DB: ${{ runner.temp }}/check.sqlite
+        run: |
+          python -c "from backend.database import make_engine, migrate, database_path; migrate(make_engine(database_path()))"
+          python -m alembic check
+
+      - name: Install the browser for end-to-end tests
+        run: python -m playwright install --with-deps chromium
+
+      - name: API and browser tests
+        run: python -m pytest -q
