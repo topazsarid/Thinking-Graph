@@ -34,6 +34,8 @@ Most AI tools blur the line between *what you think* and *what the AI suggested*
 
 <p align="center"><img src="docs/images/mobile-chat.png" alt="Phone layout: chat with a mirrored reply and an external-advisor reply" width="280"></p>
 
+**Personal touches** — optional background effects (birds, a growing garden, a burning screen), a theme color picker, and an effect studio: paint your own pixel pattern on a grid, or upload images that float behind the windows. Effects are stored only in the browser.
+
 ## Tech stack
 
 | Layer | Technology |
