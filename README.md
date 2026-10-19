@@ -4,7 +4,7 @@
 
 **A local-first thinking workspace: write your thoughts in a chat, turn them into a visual map of ideas and relationships, and consult a local AI — without your private thoughts ever leaving your computer.**
 
-![Thinking Graph: chat, idea map and drawing board side by side](docs/images/overview.png)
+![Thinking Graph: chat, idea map and drawing board side by side]
 
 <sub>Demo data. The interface is in Hebrew (right-to-left); English is on the roadmap.</sub>
 
