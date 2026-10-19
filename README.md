@@ -32,7 +32,7 @@ Most AI tools blur the line between *what you think* and *what the AI suggested*
 
 **Workspace** — draggable, resizable windows (chat, map, drawing board), a focus mode, drawing zoom/pan, notes and tasks, conversation history, per-conversation answer preferences, and a phone layout.
 
-<p align="center"><img src="docs/images/mobile-chat.png" alt="Phone layout: chat with a mirrored reply and an external-advisor reply" width="280"></p>
+<p align="center"><img alt="Phone layout: chat with a mirrored reply and an external-advisor reply" width="280"></p>
 
 **Personal touches** — optional background effects (birds, a growing garden, a burning screen), a theme color picker, and an effect studio: paint your own pixel pattern on a grid, or upload images that float behind the windows. Effects are stored only in the browser.
 
